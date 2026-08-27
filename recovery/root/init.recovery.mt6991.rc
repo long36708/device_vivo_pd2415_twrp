@@ -1,0 +1,27 @@
+# Copyright (C) 2025 The OrangeFox for pd2415 contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# SoC-specific early init for MT6991 (MediaTek Dimensity 9400). Same SoC as
+# dali; recovery-specific tuneables go here; device HAL/crypto logic belongs
+# in init.recovery.project.rc.
+#
+# of.skip_vendor_module_mount / of.skip_format_pending_merge are set in
+# init.recovery.project.rc (on early-init); do NOT repeat them here.
+
+import /init.recovery.project.rc
+
+on init
+    # MediaTek MT6991 USB controller + configfs
+    setprop sys.usb.configfs 1
+    setprop sys.usb.controller "11200000.dwc3"
+
+on fs && property:ro.debuggable=0
+    # SoC-specific fs hooks (e.g. charging-free USB detection) go here.
+
+on boot
+    # SoC utilities (MediaTek: mtk_plpath_utils). Copy the structure
+    # from the reference init.recovery.mt6991.rc and adjust the binary name.
+    #   exec u:r:update_engine:s0 root root -- /system/bin/mtk_plpath_utils
+
+# Optional early SoC service definitions (thermal, disp, etc.) go here.

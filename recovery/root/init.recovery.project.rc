@@ -1,0 +1,79 @@
+# Copyright (C) 2025 The OrangeFox for pd2415 contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Device/project init for vivo X200 Pro mini (pd2415). The reference dali tree
+# wires the crypto HAL chain (tee-supplicant, keymint, gatekeeper, weaver,
+# secure_element) and TEE state here. Replace the helper scripts and service
+# names with those of the target device; the skeleton below is generic.
+
+on early-init
+    # Modules live in the recovery ramdisk; keep the ramdisk HAL closure visible
+    # and correctly labelled until manual mounts are requested.
+    setprop of.skip_vendor_module_mount 1
+    setprop of.skip_format_pending_merge 1
+    stop keystore2
+    mkdir /odm 0755 root root
+    mkdir /usb_otg 0755 root root
+    mkdir /mnt/vendor 0755 root root
+    mkdir /mnt/vendor/persist 0755 root root
+    mount_all /system/etc/fstab.pd2415.persist --early
+    restorecon_recursive /mnt/vendor/persist
+
+on property:servicemanager.ready=true
+    # Start device boot-control HAL if present.
+    # start vendor.boot-default
+
+on property:twrp.modules.loaded=true
+    # Hook for device-specific runtime setup after modules load.
+    trigger pd2415_vendor_runtime
+
+on pd2415_vendor_runtime
+    restorecon_recursive /system/bin
+    restorecon_recursive /system/lib64
+    restorecon_recursive /system/etc
+    # Label the ramdisk vendor/odm HAL closure before starting HALs.
+    restorecon_recursive /vendor/bin
+    restorecon_recursive /vendor/lib64
+    restorecon_recursive /odm
+    # Reference (dali): set the crypto SPL ceiling synchronously from the
+    # installed system so KeyMint accepts upgraded FBE blobs after an OTA.
+    #   exec u:r:recovery:s0 -- /system/bin/pd2415-spl-override.sh
+    #   exec u:r:recovery:s0 -- /system/bin/pd2415-ensure-tee.sh
+
+# --- crypto HAL chain (Trustonic TEE for PD2415) ---------------------------
+# PD2415 uses Trustonic TEE (vendor.trustonic.tee-service), NOT tee-supplicant.
+# HAL binaries in prebuilt/recovery_vendor_hal/bin/hw/:
+#   android.hardware.security.keymint@3.0-service.trustonic
+#   android.hardware.gatekeeper-service.trustonic
+#   android.hardware.boot-service.mtk
+#   android.hardware.secure_element@1.2-service
+#   vendor.trustonic.tee-service
+#
+# service vendor.trustonic.tee /vendor/bin/hw/vendor.trustonic.tee-service
+#     class core
+#     user system
+#     group system
+#     disabled
+#
+# on property:twrp.modules.loaded=true && property:vendor.teefs_state=ready
+#     start vendor.trustonic.tee
+#     start vendor.keymint-trustonic
+#     start keystore2
+#     start vendor.gatekeeper-trustonic
+#     start vendor.secure_element
+#     start vendor.boot-default
+#
+# Boot-time SPL override (prop.default must NOT bake SPLs; the installed
+# system's real patchlevel is published here):
+#   service pd2415-spl-override /system/bin/pd2415-spl-override.sh
+#       class core
+#       user root
+#       oneshot
+
+on property:orangefox.postinit.status=1
+    # Detach logical vendor/odm mounts OrangeFox may have created so they are
+    # free for OTA snapshot handling.
+
+on property:init.svc.recovery=running
+    # Recovery entry point; device-specific late hooks go here.

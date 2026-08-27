@@ -1,0 +1,9 @@
+# Copyright (C) 2025 The OrangeFox for pd2415 contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# genfs_contexts for the recovery ramdisk. Label the module tree and persist so
+# recovery's insmod / tee loaders run with the right type.
+
+genfscon sysfs /devices/platform/soc/mt6991-.*   u:object_r:sysfs_soc:s0
+genfscon proc  /driver/                          u:object_r:proc_driver:s0

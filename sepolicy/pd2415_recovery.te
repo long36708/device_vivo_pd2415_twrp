@@ -1,0 +1,33 @@
+# Copyright (C) 2025 The OrangeFox for pd2415 contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Device-type enforcement for pd2415 recovery. The reference dali tree grants
+# recovery the rights to load the ramdisk HAL closure, run the crypto HAL chain,
+# and read/write persist + tee state. Keep device-specific HAL domains and add
+# allow rules for whichever HAL executables you label in file_contexts.
+#
+# Use platform-defined type names where they exist (persist_data_file,
+# hal_keymint_default_exec, ...). Only declare NEW types for device-specific
+# state that has no platform equivalent (e.g. pd2415_mitee_data_file).
+
+type recovery_modules_file, file_type;
+# Declare device-specific TEE state types here (example from dali):
+# type pd2415_mitee_data_file, file_type, data_file_type;
+
+# Recovery may load kernel modules shipped in the ramdisk.
+allow recovery recovery_modules_file:file { read open execute getattr };
+allow recovery recovery_modules_file:dir { read open getattr search };
+
+# Recovery drives the crypto HAL chain.
+allow recovery hal_keymint_default_exec:file { read open execute getattr };
+allow recovery hal_gatekeeper_default_exec:file { read open execute getattr };
+allow recovery hal_secure_element_default_exec:file { read open execute getattr };
+allow recovery tee_supplicant_exec:file { read open execute getattr };
+
+# Persist / tee state access (persist_data_file is a platform-defined type).
+allow recovery persist_data_file:dir { read write getattr search };
+allow recovery persist_data_file:file { read write open getattr create };
+# Device-specific TEE state (example from dali):
+# allow recovery pd2415_mitee_data_file:dir { read write getattr search };
+# allow recovery pd2415_mitee_data_file:file { read write open getattr };

@@ -1,0 +1,11 @@
+# Copyright (C) 2025 The OrangeFox for pd2415 contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Recovery property contexts. Declare device-specific vendor props here; the
+# of.*/twrp.* control props are handled by the platform default_prop type and
+# do NOT need custom entries (adding them risks neverallow conflicts).
+
+# TEE readiness state used to gate the crypto HAL chain (example name from
+# dali; rename the prop + type to match the target's TEE):
+# vendor.teefs_state                  u:object_r:pd2415_teefs_prop:s0

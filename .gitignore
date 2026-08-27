@@ -1,0 +1,9 @@
+# One-time extraction artifacts (not needed for build, only for extracting kernel)
+prebuilt/kernel_source/
+
+# Python cache
+__pycache__/
+
+# Intermediate cpio files (only .cpio.gz needed)
+prebuilt/vendor_ramdisk/*.cpio
+.idea

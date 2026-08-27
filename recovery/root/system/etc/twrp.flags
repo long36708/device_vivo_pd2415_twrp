@@ -1,0 +1,8 @@
+# Copyright (C) 2025 The OrangeFox for pd2415 contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# TWRP mount flags for removable storage. Keep /usb_otg; add device-specific
+# removable volumes if needed.
+
+/usb_otg auto /dev/block/sdd1 /dev/block/sdd flags=storage;removable;display="USB-OTG"
