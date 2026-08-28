@@ -12,6 +12,9 @@
 # state that has no platform equivalent (e.g. pd2415_mitee_data_file).
 
 type recovery_modules_file, file_type;
+# PD2415 uses Trustonic TEE (vendor.trustonic.tee-service), NOT tee-supplicant.
+# (see EXTRACT-GUIDE.md: PD2415 has no /vendor/bin/tee-supplicant)
+type pd2415_tee_exec, file_type;
 # Declare device-specific TEE state types here (example from dali):
 # type pd2415_mitee_data_file, file_type, data_file_type;
 
@@ -23,7 +26,7 @@ allow recovery recovery_modules_file:dir { read open getattr search };
 allow recovery hal_keymint_default_exec:file { read open execute getattr };
 allow recovery hal_gatekeeper_default_exec:file { read open execute getattr };
 allow recovery hal_secure_element_default_exec:file { read open execute getattr };
-allow recovery tee_supplicant_exec:file { read open execute getattr };
+allow recovery pd2415_tee_exec:file { read open execute getattr };
 
 # Persist / tee state access (persist_data_file is a platform-defined type).
 allow recovery persist_data_file:dir { read write getattr search };

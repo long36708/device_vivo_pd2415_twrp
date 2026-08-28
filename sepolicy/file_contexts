@@ -10,8 +10,8 @@
 # media_rw_data_file, ...) — do NOT invent new types that collide with platform
 # policy. Device-specific types belong in pd2415_*.te with unique names.
 
-/vendor/bin/tee-supplicant            u:object_r:tee_supplicant_exec:s0
-/vendor/bin/hw/vendor.trustonic.tee-service u:object_r:tee_supplicant_exec:s0
+# PD2415 has no /vendor/bin/tee-supplicant; TEE is Trustonic.
+/vendor/bin/hw/vendor.trustonic.tee-service u:object_r:pd2415_tee_exec:s0
 /vendor/bin/hw/vendor.gatekeeper-.*   u:object_r:hal_gatekeeper_default_exec:s0
 /vendor/bin/hw/vendor.keymint-.*      u:object_r:hal_keymint_default_exec:s0
 /vendor/bin/hw/vendor.secure_element-.* u:object_r:hal_secure_element_default_exec:s0
