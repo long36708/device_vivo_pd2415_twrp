@@ -28,22 +28,7 @@ TARGET_NO_RECOVERY := true
 AB_OTA_UPDATER := true
 OF_USE_AIDL_BOOT_CONTROL := 1
 # Match the device's dynamic partition set (from stock fstab.mt6991).
-AB_OTA_PARTITIONS := \
-    boot \
-    dtbo \
-    init_boot \
-    odm \
-    odm_dlkm \
-    product \
-    system \
-    system_dlkm \
-    system_ext \
-    vbmeta \
-    vbmeta_system \
-    vbmeta_vendor \
-    vendor \
-    vendor_boot \
-    vendor_dlkm
+AB_OTA_PARTITIONS := boot dtbo init_boot odm odm_dlkm product system system_dlkm system_ext vbmeta vbmeta_system vbmeta_vendor vendor vendor_boot vendor_dlkm
 
 # --- boot image (vendor_boot v4) ---------------------------------------------
 # Sizes/offsets/cmdline copied verbatim from the stock vendor_boot.img
@@ -58,12 +43,7 @@ BOARD_VENDOR_BOOTIMAGE_PARTITION_SIZE := 134217728
 BOARD_KERNEL_BASE := 0x80000000
 BOARD_KERNEL_PAGESIZE := 4096
 BOARD_KERNEL_CMDLINE := bootopt=64S3,32N2,64N2 product.version=PD2415_A_15.0.33.7.W10 fingerprint.abbr=15/AP3A.240905.015.A1 region_ver=W10 product.solution=MTK
-BOARD_MKBOOTIMG_ARGS := \
-    --header_version 4 \
-    --kernel_offset 0x00000000 \
-    --ramdisk_offset 0xa4d00000 \
-    --tags_offset 0x87c80000 \
-    --dtb_offset 0x87c80000
+BOARD_MKBOOTIMG_ARGS := --header_version 4 --kernel_offset 0x00000000 --ramdisk_offset 0xa4d00000 --tags_offset 0x87c80000 --dtb_offset 0x87c80000
 
 TARGET_PREBUILT_KERNEL := $(DEVICE_PATH)/prebuilt/kernel
 BOARD_INCLUDE_DTB_IN_BOOTIMG := true
@@ -95,23 +75,12 @@ TW_USE_LEGACY_BATTERY_SERVICES := true
 # --- ramdisk preparation hook --------------------------------------------------
 # Runs after ordinary Recovery relinking and the initial manifests, before
 # mkbootfs packages the final root; stages modules / props / HAL / firmware.
-BOARD_RECOVERY_IMAGE_PREPARE = $(DEVICE_PATH)/recovery/prepare-ramdisk.sh \
-    $(TARGET_RECOVERY_ROOT_OUT) \
-    $(SOONG_OUT_DIR)/Android-$(TARGET_PRODUCT).mk \
-    $(abspath $(LLVM_READOBJ)) \
-    $(abspath $(DEVICE_PATH)/prebuilt/recovery_modules) \
-    $(abspath $(DEVICE_PATH)/prebuilt/recovery_properties) \
-    $(abspath $(DEVICE_PATH)/prebuilt/recovery_vendor_hal) \
-    $(abspath $(DEVICE_PATH)/prebuilt/recovery_firmware)
+BOARD_RECOVERY_IMAGE_PREPARE = $(DEVICE_PATH)/recovery/prepare-ramdisk.sh $(TARGET_RECOVERY_ROOT_OUT) $(SOONG_OUT_DIR)/Android-$(TARGET_PRODUCT).mk $(abspath $(LLVM_READOBJ)) $(abspath $(DEVICE_PATH)/prebuilt/recovery_modules) $(abspath $(DEVICE_PATH)/prebuilt/recovery_properties) $(abspath $(DEVICE_PATH)/prebuilt/recovery_vendor_hal) $(abspath $(DEVICE_PATH)/prebuilt/recovery_firmware)
 
 # pd2415_recovery_prepare_marker is the phony guard package in Android.mk.
-TARGET_RECOVERY_DEVICE_MODULES += \
-    servicemanager.recovery \
-    pd2415_recovery_prepare_marker \
-    dmctl
+TARGET_RECOVERY_DEVICE_MODULES += servicemanager.recovery pd2415_recovery_prepare_marker dmctl
 
-TW_RECOVERY_ADDITIONAL_RELINK_LIBRARY_FILES += \
-    $(TARGET_OUT_SHARED_LIBRARIES)/libsysutils.so
+TW_RECOVERY_ADDITIONAL_RELINK_LIBRARY_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libsysutils.so
 
 # --- flashlight -------------------------------------------------------------------
 # TODO: find the correct sysfs paths on PD2415 before enabling.
