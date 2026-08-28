@@ -6,4 +6,4 @@ PRODUCT_MAKEFILES := \
     $(LOCAL_DIR)/twrp_pd2415.mk
 
 COMMON_LUNCH_CHOICES := \
-    twrp_pd2415-ap3a-eng
+    twrp_pd2415-ap2a-eng

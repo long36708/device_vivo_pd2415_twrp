@@ -25,7 +25,7 @@ SHA-verified — never hand-written.
 
 ```
 device_vivo_pd2415_twrp/
-  AndroidProducts.mk    lunch: twrp_pd2415-ap3a-eng
+  AndroidProducts.mk    lunch: twrp_pd2415-ap2a-eng
   BoardConfig.mk        arch, v4 offsets, AB_OTA, TW_/OF_/FOX_ flags,
                         BOARD_RECOVERY_IMAGE_PREPARE hook, module config
   Android.mk            phony guard package (fails build when prebuilts are missing)
@@ -76,7 +76,7 @@ sh <device-tree>/apply-patches.sh          # from the OrangeFox source root
 
 # 2. build the stock-layout vendor_boot (recovery fragment included)
 source build/envsetup.sh
-lunch twrp_pd2415-ap3a-eng
+lunch twrp_pd2415-ap2a-eng
 m vendorboot
 
 # 3. assemble + verify the final image
