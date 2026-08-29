@@ -34,17 +34,31 @@ type persist_data_file, file_type, data_file_type;
 type sysfs_soc, fs_type, sysfs_type;
 # Declare additional device state types here as the crypto HAL chain is wired up.
 
-# Recovery may load kernel modules shipped in the ramdisk.
-allow recovery recovery_modules_file:file { read open execute getattr };
+# Recovery may LOAD kernel modules shipped in the ramdisk.
+# IMPORTANT: recovery_modules_file is NOT an exec_type, so read/open/getattr
+# does NOT trip the recovery-domain neverallow on exec_type (domain.te:399).
+# The insmod is performed by the kernel/module loader domain, not by the
+# recovery domain executing the .ko directly.
+allow recovery recovery_modules_file:file { read open getattr };
 allow recovery recovery_modules_file:dir { read open getattr search };
 
-# Recovery drives the crypto HAL chain. The hal_* types are predefined;
-# pd2415_tee_exec is the locally declared Trustonic service.
-allow recovery hal_keymint_default_exec:file { read open execute getattr };
-allow recovery hal_gatekeeper_default_exec:file { read open execute getattr };
-allow recovery hal_secure_element_default_exec:file { read open execute getattr };
-allow recovery pd2415_tee_exec:file { read open execute getattr };
+# Recovery drives the crypto HAL chain. The hal_*_default_exec and
+# pd2415_tee_exec types are exec_type; the recovery domain is forbidden by
+# AOSP neverallow rules (domain.te:787 / domain.te:946) from executing any
+# exec_type directly. These HALs must be started by init under their own
+# domains (transition via service_contexts / init.rc), NOT exec'd by the
+# recovery domain. We therefore only grant the read side that recovery needs
+# to map/inspect these binaries; execution is handled by the HAL domains.
+allow recovery hal_keymint_default_exec:file { read open getattr };
+allow recovery hal_gatekeeper_default_exec:file { read open getattr };
+allow recovery hal_secure_element_default_exec:file { read open getattr };
+allow recovery pd2415_tee_exec:file { read open getattr };
 
 # Persist / tee state access (persist_data_file declared above).
-allow recovery persist_data_file:dir { read write getattr search };
-allow recovery persist_data_file:file { read write open getattr create };
+# The recovery domain is forbidden by recovery.te:165/171 from writing
+# base_typeattr_583 (which persist_data_file expands into). Recovery only
+# needs to READ the persist partition (e.g. to read TEE/key provisioning
+# state). Keep this read-only; any writes must go through a dedicated
+# persistent-service domain, not the recovery domain.
+allow recovery persist_data_file:dir { read getattr search };
+allow recovery persist_data_file:file { read open getattr };
