@@ -2,8 +2,14 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# genfs_contexts for the recovery ramdisk. Label the module tree and persist so
-# recovery's insmod / tee loaders run with the right type.
+# genfs_contexts for the recovery ramdisk.
+#
+# Only entries grounded in this device are kept. MT6991 is the real platform for
+# pd2415 (confirmed by fstab.mt6991, init.recovery.mt6991.rc and the mt6991_*
+# kernel modules in TW_LOAD_VENDOR_MODULES).
+#
+# A "/proc/driver" entry used to be listed here purely because a reference tree
+# had one; nothing in this device tree reads that path, so it was removed. Add
+# genfscon lines only for paths some recovery component actually touches.
 
 genfscon sysfs /devices/platform/soc/mt6991-.*   u:object_r:sysfs_soc:s0
-genfscon proc  /driver/                          u:object_r:proc_driver:s0

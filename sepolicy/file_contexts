@@ -2,26 +2,37 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Recovery-only sepolicy file_contexts. Add device-specific HAL binaries and
-# state paths here. The reference dali tree labels the crypto HAL chain under
-# /vendor and the ramdisk module closure under /lib/modules.
+# Recovery-only sepolicy file_contexts for vivo X200 Pro mini (pd2415).
 #
-# Recovery sepolicy is a small STANDALONE policy. Types from the normal Android
-# system policy are NOT predefined. Verified against the dali tree:
-#   must be declared locally : persist_data_file, persist_block_device, ...
-#   predefined, do NOT declare: hal_*_default_exec, misc_block_device,
-#                               nfc_device, tee_exec
-# storage_file / media_rw_data_file belong to the full system policy and are
-# absent here — do NOT use them to label paths.
+# Every path below is taken from THIS device tree, not from a reference:
+#   HAL binary names : prebuilt/recovery_vendor_hal/bin/hw/  (6 real files)
+#   HAL landing path : $root/vendor/       (recovery/prepare-ramdisk.sh:123)
+#   module path      : $root/lib/modules   (recovery/prepare-ramdisk.sh:95)
+#   persist mount    : /mnt/vendor/persist
+#                      (recovery/root/system/etc/fstab.pd2415.persist)
+#
+# PD2415 TEE is Trustonic (ro.hardware.kmsetkey=trustonic,
+# ro.vendor.mtk_trustonic_tee_support=1). There is no /vendor/bin/tee-supplicant
+# and no Mitee TEE here, so no tee-supplicant / MITEE labels belong in this file.
 
-# PD2415 has no /vendor/bin/tee-supplicant; TEE is Trustonic.
-/vendor/bin/hw/vendor.trustonic.tee-service u:object_r:pd2415_tee_exec:s0
-/vendor/bin/hw/vendor.gatekeeper-.*   u:object_r:hal_gatekeeper_default_exec:s0
-/vendor/bin/hw/vendor.keymint-.*      u:object_r:hal_keymint_default_exec:s0
-/vendor/bin/hw/vendor.secure_element-.* u:object_r:hal_secure_element_default_exec:s0
+# --- crypto HAL chain --------------------------------------------------------
+# These binaries are named in the AOSP "android.hardware.*-service[.variant]"
+# form with a ".trustonic" suffix — NOT the "vendor.*" form used on QTI-based
+# devices. Patterns copied from such a device (vendor.gatekeeper-*,
+# vendor.keymint-*, vendor.secure_element-*) match nothing here and would leave
+# the HALs unlabelled.
+/vendor/bin/hw/android\.hardware\.security\.keymint@3\.0-service\.trustonic u:object_r:hal_keymint_default_exec:s0
+/vendor/bin/hw/android\.hardware\.gatekeeper-service\.trustonic u:object_r:hal_gatekeeper_default_exec:s0
+/vendor/bin/hw/android\.hardware\.secure_element@1\.2-service.* u:object_r:hal_secure_element_default_exec:s0
+/vendor/bin/hw/vendor\.trustonic\.tee-service u:object_r:pd2415_tee_exec:s0
 
+# Boot HAL exists but is deliberately NOT labelled yet:
+#   /vendor/bin/hw/android.hardware.boot-service.mtk -> hal_bootctl_default_exec
+# hal_bootctl_default_exec has not been verified as predefined in this policy,
+# and an undefined type aborts the whole sepolicy build. No service starts it
+# yet (the crypto chain in init.recovery.project.rc is still commented out),
+# so defer until it is actually needed and then verify first.
+
+# --- state & modules ---------------------------------------------------------
 /mnt/vendor/persist(/.*)?             u:object_r:persist_data_file:s0
 /lib/modules(/.*)?                    u:object_r:recovery_modules_file:s0
-# Label device-specific TEE state paths here (example from dali):
-# /mnt/vendor/persist/MITEE(/.*)?     u:object_r:pd2415_mitee_data_file:s0
-# /data/vendor/mitee(/.*)?            u:object_r:pd2415_mitee_data_file:s0

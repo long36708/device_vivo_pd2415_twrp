@@ -2,41 +2,44 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Device-type enforcement for pd2415 recovery. The reference dali tree grants
-# recovery the rights to load the ramdisk HAL closure, run the crypto HAL chain,
-# and read/write persist + tee state. Keep device-specific HAL domains and add
-# allow rules for whichever HAL executables you label in file_contexts.
+# Device-type enforcement for pd2415 recovery (vivo X200 Pro mini, MT6991).
 #
-# IMPORTANT: recovery sepolicy is a small standalone policy. Types from the
-# normal Android system policy (persist_data_file, mitee_sfs_file, ...) are NOT
-# predefined here and MUST be declared locally. dali does exactly that in
-# dali_crypto.te (`type persist_data_file, file_type, data_file_type;`).
-# Only skip declaring types that genuinely come with the recovery policy
-# (hal_keymint_default_exec, hal_gatekeeper_default_exec, ...).
+# WHICH TYPES MUST BE DECLARED HERE — determined from THIS device's own builds,
+# not from any reference tree. checkpolicy aborts on the first unknown type, so
+# the sequence of failures we hit is the authoritative evidence:
+#   1. tee_supplicant_exec   -> unknown  (declared locally as pd2415_tee_exec)
+#   2. persist_data_file     -> unknown  (declared locally)
+#   3. sysfs_soc             -> unknown  (declared locally)
+# The hal_*_default_exec rules sit BEFORE those in this file and were never
+# reported, therefore they are PREDEFINED in the recovery policy:
+#   predefined (do NOT declare): hal_keymint_default_exec,
+#                                hal_gatekeeper_default_exec,
+#                                hal_secure_element_default_exec
+#   must declare locally       : everything else you invent
+#
+# PD2415 specifics (see EXTRACT-GUIDE.md):
+#   - TEE is Trustonic (ro.hardware.kmsetkey=trustonic,
+#     ro.vendor.mtk_trustonic_tee_support=1)
+#   - there is NO /vendor/bin/tee-supplicant and NO Mitee TEE; do not copy
+#     tee-supplicant / MITEE declarations from other devices
 
+# Kernel modules staged into the ramdisk by recovery/prepare-ramdisk.sh.
 type recovery_modules_file, file_type;
-# PD2415 uses Trustonic TEE (vendor.trustonic.tee-service), NOT tee-supplicant.
-# (see EXTRACT-GUIDE.md: PD2415 has no /vendor/bin/tee-supplicant)
+# Trustonic TEE service: vendor.trustonic.tee-service (not tee-supplicant).
 type pd2415_tee_exec, file_type, exec_type;
-# /mnt/vendor/persist — NOT a platform type in recovery policy.
+# /mnt/vendor/persist, mounted via system/etc/fstab.pd2415.persist.
 type persist_data_file, file_type, data_file_type;
-# Labels for the nodes matched by genfs_contexts (mt6991 platform).
-# These platform type names are NOT visible in the recovery/vendor policy, so
-# they must be declared locally (same pattern as persist_data_file above).
-# Attribute set follows dali's `dali_touch_raw_sysfs, fs_type, sysfs_type`,
-# which is the proven-safe combination for sysfs nodes in recovery policy.
+# MT6991 SoC sysfs nodes (real platform for this device: fstab.mt6991,
+# init.recovery.mt6991.rc, and the mt6991_* kernel modules all confirm it).
 type sysfs_soc, fs_type, sysfs_type;
-# /proc/driver — no proc_type precedent exists in the reference tree, so only
-# the proven-safe fs_type attribute is used.
-type proc_driver, fs_type;
-# Declare device-specific TEE state types here (example from dali):
-# type pd2415_mitee_data_file, file_type, data_file_type;
+# Declare additional device state types here as the crypto HAL chain is wired up.
 
 # Recovery may load kernel modules shipped in the ramdisk.
 allow recovery recovery_modules_file:file { read open execute getattr };
 allow recovery recovery_modules_file:dir { read open getattr search };
 
-# Recovery drives the crypto HAL chain.
+# Recovery drives the crypto HAL chain. The hal_* types are predefined;
+# pd2415_tee_exec is the locally declared Trustonic service.
 allow recovery hal_keymint_default_exec:file { read open execute getattr };
 allow recovery hal_gatekeeper_default_exec:file { read open execute getattr };
 allow recovery hal_secure_element_default_exec:file { read open execute getattr };
@@ -45,6 +48,3 @@ allow recovery pd2415_tee_exec:file { read open execute getattr };
 # Persist / tee state access (persist_data_file declared above).
 allow recovery persist_data_file:dir { read write getattr search };
 allow recovery persist_data_file:file { read write open getattr create };
-# Device-specific TEE state (example from dali):
-# allow recovery pd2415_mitee_data_file:dir { read write getattr search };
-# allow recovery pd2415_mitee_data_file:file { read write open getattr };
