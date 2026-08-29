@@ -24,7 +24,21 @@
 #     tee-supplicant / MITEE declarations from other devices
 
 # Kernel modules staged into the ramdisk by recovery/prepare-ramdisk.sh.
+# recovery_modules_file is a bare file_type (NOT exec_type, NOT data_file_type),
+# so the recovery domain may read it without tripping any neverallow.
 type recovery_modules_file, file_type;
+
+# The types below are declared so the file_contexts labels resolve, BUT the
+# recovery domain is FORBIDDEN by AOSP neverallow rules from holding ANY
+# access (even read/open) to them:
+#   - hal_*_default_exec / pd2415_tee_exec are exec_type
+#       -> domain.te:787 / domain.te:946 (neverallow * *exec_type* (... open ...))
+#   - persist_data_file is data_file_type
+#       -> recovery.te:165/171, domain.te:772/906 (neverallow * *data_file_type* (... open read ...))
+# These HALs/persist are reached by their OWN domains (init starts the HALs
+# under hal_*_default; persist is accessed by the HAL/service domains), never
+# by the recovery domain directly. Therefore NO "allow recovery" rules target
+# them. Add per-HAL-domain rules here only when the crypto chain is enabled.
 # Trustonic TEE service: vendor.trustonic.tee-service (not tee-supplicant).
 type pd2415_tee_exec, file_type, exec_type;
 # /mnt/vendor/persist, mounted via system/etc/fstab.pd2415.persist.
@@ -34,31 +48,8 @@ type persist_data_file, file_type, data_file_type;
 type sysfs_soc, fs_type, sysfs_type;
 # Declare additional device state types here as the crypto HAL chain is wired up.
 
-# Recovery may LOAD kernel modules shipped in the ramdisk.
-# IMPORTANT: recovery_modules_file is NOT an exec_type, so read/open/getattr
-# does NOT trip the recovery-domain neverallow on exec_type (domain.te:399).
-# The insmod is performed by the kernel/module loader domain, not by the
-# recovery domain executing the .ko directly.
+# Recovery may LOAD kernel modules shipped in the ramdisk. recovery_modules_file
+# is a plain file_type, so read/open/getattr on it does not violate any
+# recovery-domain neverallow (it is neither exec_type nor data_file_type).
 allow recovery recovery_modules_file:file { read open getattr };
 allow recovery recovery_modules_file:dir { read open getattr search };
-
-# Recovery drives the crypto HAL chain. The hal_*_default_exec and
-# pd2415_tee_exec types are exec_type; the recovery domain is forbidden by
-# AOSP neverallow rules (domain.te:787 / domain.te:946) from executing any
-# exec_type directly. These HALs must be started by init under their own
-# domains (transition via service_contexts / init.rc), NOT exec'd by the
-# recovery domain. We therefore only grant the read side that recovery needs
-# to map/inspect these binaries; execution is handled by the HAL domains.
-allow recovery hal_keymint_default_exec:file { read open getattr };
-allow recovery hal_gatekeeper_default_exec:file { read open getattr };
-allow recovery hal_secure_element_default_exec:file { read open getattr };
-allow recovery pd2415_tee_exec:file { read open getattr };
-
-# Persist / tee state access (persist_data_file declared above).
-# The recovery domain is forbidden by recovery.te:165/171 from writing
-# base_typeattr_583 (which persist_data_file expands into). Recovery only
-# needs to READ the persist partition (e.g. to read TEE/key provisioning
-# state). Keep this read-only; any writes must go through a dedicated
-# persistent-service domain, not the recovery domain.
-allow recovery persist_data_file:dir { read getattr search };
-allow recovery persist_data_file:file { read open getattr };
