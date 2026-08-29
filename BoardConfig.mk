@@ -43,7 +43,11 @@ BOARD_VENDOR_BOOTIMAGE_PARTITION_SIZE := 134217728
 BOARD_KERNEL_BASE := 0x80000000
 BOARD_KERNEL_PAGESIZE := 4096
 BOARD_KERNEL_CMDLINE := bootopt=64S3,32N2,64N2 product.version=PD2415_A_15.0.33.7.W10 fingerprint.abbr=15/AP3A.240905.015.A1 region_ver=W10 product.solution=MTK
-BOARD_MKBOOTIMG_ARGS := --header_version 4 --kernel_offset 0x00000000 --ramdisk_offset 0xa4d00000 --tags_offset 0x87c80000 --dtb_offset 0x87c80000
+# NOTE: vendor_boot v4 has NO tags_offset field (that is a legacy boot v0/v1
+# option). Passing --tags_offset makes mkbootimg stuff the value into a 32-bit
+# struct field and abort with "struct.error: 'I' format requires 0 <= number
+# <= 4294967295". The DTB offset in v4 is a 64-bit field and is valid.
+BOARD_MKBOOTIMG_ARGS := --header_version 4 --kernel_offset 0x00000000 --ramdisk_offset 0xa4d00000 --dtb_offset 0x87c80000
 
 TARGET_PREBUILT_KERNEL := $(DEVICE_PATH)/prebuilt/kernel
 BOARD_INCLUDE_DTB_IN_BOOTIMG := true
