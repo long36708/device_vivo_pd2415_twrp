@@ -20,10 +20,15 @@ type recovery_modules_file, file_type;
 type pd2415_tee_exec, file_type, exec_type;
 # /mnt/vendor/persist — NOT a platform type in recovery policy.
 type persist_data_file, file_type, data_file_type;
-# Label for the sysfs soc node matched by genfs_contexts (mt6991 platform).
-# Platform type sysfs_soc is NOT visible in the recovery/vendor policy, so it
-# must be declared locally (same pattern as persist_data_file above).
-type sysfs_soc, fs_type;
+# Labels for the nodes matched by genfs_contexts (mt6991 platform).
+# These platform type names are NOT visible in the recovery/vendor policy, so
+# they must be declared locally (same pattern as persist_data_file above).
+# Attribute set follows dali's `dali_touch_raw_sysfs, fs_type, sysfs_type`,
+# which is the proven-safe combination for sysfs nodes in recovery policy.
+type sysfs_soc, fs_type, sysfs_type;
+# /proc/driver — no proc_type precedent exists in the reference tree, so only
+# the proven-safe fs_type attribute is used.
+type proc_driver, fs_type;
 # Declare device-specific TEE state types here (example from dali):
 # type pd2415_mitee_data_file, file_type, data_file_type;
 
