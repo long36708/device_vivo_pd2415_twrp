@@ -34,22 +34,32 @@ out="$script_dir/prebuilt"
 # --- dtb ----------------------------------------------------------------------
 install -D -m 0644 "$source_root/dtb" "$out/dtb/pd2415.dtb"
 
-# --- platform ramdisk (lz4 -> gzip) -------------------------------------------
-command -v lz4 >/dev/null 2>&1 || {
-    echo "lz4 is required to convert the official platform ramdisk" >&2
-    exit 1
-}
+# --- platform ramdisk (cpio -> gzip) -------------------------------------------
+# NOTE: the official vendor_boot platform ramdisk is shipped as TWO artifacts in
+# mod/: `ramdisk.1` (a plain newc cpio, header "0707...") and `ramdisk.1.lz4`.
+# `ramdisk.1.lz4` uses vivo/MTK's private lz4 variant (magic 02 21 4C 18), which
+# the stock `lz4` binary CANNOT decompress — using `lz4 -dc` on it produced a
+# truncated platform fragment (missing /init, /sepolicy, *_file_contexts, ...),
+# which made the device hang at the logo even on the stock boot image. Always
+# take the already-extracted plain cpio `ramdisk.1` instead.
 platform_dir="$out/vendor_ramdisk"
 mkdir -p "$platform_dir"
-platform_raw=$(mktemp "$platform_dir/.platform.cpio.XXXXXX")
 platform_gzip="$platform_dir/platform.cpio.gz"
 platform_gzip_tmp=$(mktemp "$platform_dir/.platform.cpio.gz.XXXXXX")
 cleanup() {
-    rm -f "$platform_raw" "$platform_gzip_tmp"
+    rm -f "$platform_gzip_tmp"
 }
 trap cleanup EXIT HUP INT TERM
-lz4 -dc "$source_root/ramdisk.1.lz4" > "$platform_raw"
-gzip -9 -n -c "$platform_raw" > "$platform_gzip_tmp"
+if [ -f "$source_root/ramdisk.1" ]; then
+    gzip -9 -n -c "$source_root/ramdisk.1" > "$platform_gzip_tmp"
+elif [ -f "$source_root/ramdisk.1.lz4" ]; then
+    echo "[!] ramdisk.1.lz4 is vivo/MTK private lz4 and cannot be decompressed by" >&2
+    echo "    stock lz4; use the plain cpio ramdisk.1 instead." >&2
+    exit 1
+else
+    echo "[!] neither ramdisk.1 nor ramdisk.1.lz4 found in $source_root" >&2
+    exit 1
+fi
 mv "$platform_gzip_tmp" "$platform_gzip"
 
 # --- official recovery ramdisk (cpio -> gzip) ---------------------------------

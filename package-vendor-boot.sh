@@ -253,10 +253,18 @@ gzip -t "$optimized_recovery_fragment"
 gzip -dc "$optimized_recovery_fragment" > "$work/recovery-gzip9.cpio"
 cmp "$work/recovery.cpio" "$work/recovery-gzip9.cpio"
 
-# Safe-Trim the platform fragment against the official recovery ramdisk.
-trimmed_platform_gzip="$work/platform-trimmed.cpio.gz"
-gzip -dc "$official_recovery_gzip" > "$work/official-recovery.cpio"
-trim_platform_fragment "$platform_gzip" "$work/official-recovery.cpio" "$trimmed_platform_gzip"
+# Platform fragment: use the FULL official platform ramdisk as-is.
+#
+# Earlier this script ran `trim_platform_fragment` to drop files that were
+# byte-identical between the platform and recovery ramdisks. That deletion
+# removed early-boot essentials such as /init, /default.prop, /sepolicy and the
+# *_file_contexts files, because the recovery ramdisk ships identical copies.
+# On a virtual A/B device the stock boot image still relies on the vendor_boot
+# platform fragment's /init to bring up the system, so trimming it made the
+# device hang at the logo — even with the stock boot image. We now keep the
+# complete platform ramdisk (the recovery fragment's own /init simply overlays
+# it in recovery mode).
+trimmed_platform_gzip="$platform_gzip"
 
 # Repack: platform fragment unnamed (type 0x1), recovery fragment named
 # "recovery" (type 0x2). Offsets/cmdline must match the stock image.
