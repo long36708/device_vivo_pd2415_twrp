@@ -291,8 +291,19 @@ prebuilt/
 | AVB SALT | `ruCHpb47mCl4ySP1ZqlGE0lrQX8q9ZJjm8gNFB403+c=` | vendor_boot.avb.json |
 | AVB FINGERPRINT | `vivo/PD2415/PD2415:15/AP3A.240905.015.A1/compiler11071704:user/release-keys` | vendor_boot.avb.json |
 | Kernel base | `0x80000000` | vendor_boot.json |
-| Ramdisk offset | `0xa4d00000` | vendor_boot.json |
-| Tags offset | `0x87c80000` | vendor_boot.json |
-| DTB offset | `0x87c80000` | vendor_boot.json |
+| Ramdisk load addr | `0xa4d00000` | vendor_boot.json |
+| Tags load addr | `0x87c80000` | vendor_boot.json |
+| DTB load addr | `0x87c80000` | vendor_boot.json |
+
+> **注意（血泪教训）**：上表的 ramdisk/tags/dtb 是 `vendor_boot.json` 里的**绝对加载地址**，
+> **不是** mkbootimg 的 `--*_offset`。`mkbootimg.py` 的 `write_vendor_boot_header()` 把
+> `kernel_addr`/`ramdisk_addr`/`tags_addr` 作为 32 位 `I` 字段、按 `base + offset` 写入，
+> 而 `dtb_addr` 是 64 位 `Q`。因此必须传 **相对 base 的 offset**
+> （`offset = 绝对地址 − 0x80000000`）：
+> `ramdisk_offset=0x24d00000`、`tags_offset=0x07c80000`、`dtb_offset=0x07c80000`、
+> `kernel_offset=0x00000000`。若把绝对地址直接当 offset，`0x80000000+0xa4d00000 = 0x124D00000`
+> 超过 2³²−1，mkbootimg 会中止并报
+> `struct.error: 'I' format requires 0 <= number <= 4294967295`（vendor_boot v4 头
+> **确实**包含 tags_addr，不可省略该参数）。
 | Cmdline | `bootopt=64S3,32N2,64N2 product.version=PD2415_A_15.0.33.7.W10 fingerprint.abbr=15/AP3A.240905.015.A1 region_ver=W10 product.solution=MTK` | vendor_boot.json |
 | Maintainer | LongMo | — |
