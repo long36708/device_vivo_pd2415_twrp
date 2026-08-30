@@ -192,11 +192,12 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 platform_gzip="$script_dir/prebuilt/vendor_ramdisk/platform.cpio.gz"
 official_recovery_gzip="$script_dir/prebuilt/vendor_ramdisk/official_recovery.cpio.gz"
 dtb="$script_dir/prebuilt/dtb/pd2415.dtb"
+prebuilt_kernel="$script_dir/prebuilt/kernel"
 built_vendor_boot="$source_root/out/target/product/pd2415/vendor_boot.img"
 mkbootimg="$source_root/system/tools/mkbootimg/mkbootimg.py"
 unpack_bootimg="$source_root/system/tools/mkbootimg/unpack_bootimg.py"
 avbtool="$source_root/external/avb/avbtool.py"
-for input in "$platform_gzip" "$official_recovery_gzip" "$dtb" "$built_vendor_boot" "$mkbootimg" "$unpack_bootimg" "$avbtool"
+for input in "$platform_gzip" "$official_recovery_gzip" "$dtb" "$prebuilt_kernel" "$built_vendor_boot" "$mkbootimg" "$unpack_bootimg" "$avbtool"
 do
     [ -f "$input" ] || die "missing input: $input"
 done
@@ -286,6 +287,7 @@ python3 "$mkbootimg" \
     --pagesize 4096 \
     --base 0x80000000 \
     --kernel_offset 0x00000000 \
+    --kernel "$prebuilt_kernel" \
     --ramdisk_offset 0x24d00000 \
     --tags_offset 0x07c80000 \
     --dtb_offset 0x07c80000 \
