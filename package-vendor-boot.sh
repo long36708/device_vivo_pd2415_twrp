@@ -19,8 +19,22 @@ set -eu
 export LC_ALL=C
 
 PARTITION_SIZE=134217728
-AVB_SALT=ruCHpb47mCl4ySP1ZqlGE0lrQX8q9ZJjm8gNFB403+c=
+# avbtool 的 --salt 要的是 **hex**, 32 字节即 64 个十六进制字符。
+# 别把官方 JSON 里那段 base64 直接搬过来 —— vendor_boot.avb.json / avbtool
+# info_image 之外的解包器 (unpack_bootimg 的配套 json、mkbootimg 系列) 会把
+# 二进制字段按 base64 输出, 那段字符串里有 + / = 这些非十六进制字符, 喂给
+# avbtool 只会在打包的最后一步抛:
+#     Adding hash_footer failed: Non-hexadecimal digit found
+# 换算: python3 -c "import base64,binascii;print(binascii.hexlify(base64.b64decode('...')).decode())"
+AVB_SALT=aee087a5be3b982978c923f566a94613496b417f2af592639bc80d141e34dfe7
 AVB_FINGERPRINT=vivo/PD2415/PD2415:15/AP3A.240905.015.A1/compiler11071704:user/release-keys
+# 官方 footer 的第二个属性描述符 (见 vendor_boot.avb.json / avbtool info_image)。
+# 注意两点:
+#   1) key 字面量是 **boot**, 不是 vendor_boot —— AOSP 由 BOOT_SECURITY_PATCH
+#      生成, key 固定用 boot, 即使这个 footer 长在 vendor_boot 分区上。
+#   2) 值是 2025-09-01, 不等于 Android 大版本的 SPL (AP3A.240905.015.A1 对应
+#      2024-09-05)。厂商会单独抬高 BOOT_SECURITY_PATCH, 两者不可互相推导。
+AVB_SECURITY_PATCH=2025-09-01
 PLATFORM_GZIP_SHA256=41975e4ae3f4c0f29711cbf6e1adb311daf101b83112ee400990a1ab6413d98d    # prebuilt/vendor_ramdisk/platform.cpio.gz
 PLATFORM_CPIO_SHA256=6ddca715bd7f6224768ad14b7665a7d31841a79ff41fbc5a2e757057ae5fd7ba    # gunzipped platform cpio
 OFFICIAL_RECOVERY_CPIO_SHA256=2eb8207bf3d0a401b7f548c2b8d147effbf18071e3c01244f4b3edae20ec8189    # prebuilt/vendor_ramdisk/official_recovery.cpio.gz
@@ -32,6 +46,17 @@ die() {
     echo "$*" >&2
     exit 1
 }
+
+# 提前拦住格式错误的 salt。avbtool 自己的报错 ("Non-hexadecimal digit found")
+# 出现在打包的最后一步, 而且不指明是哪个常量出问题; 这里在动工前就说清楚。
+require_hex_salt() {
+    case "$AVB_SALT" in
+        ''|*[!0-9a-fA-F]*) die "AVB_SALT must be 64 hex characters (got base64?)" ;;
+    esac
+    [ "${#AVB_SALT}" -eq 64 ] ||
+        die "AVB_SALT must be 64 hex characters, got ${#AVB_SALT}"
+}
+require_hex_salt
 
 file_sha256() {
     sha256sum "$1" | awk '{print $1}'
@@ -192,12 +217,16 @@ trap cleanup EXIT HUP INT TERM
 
 gzip -dc "$platform_gzip" > "$work/platform.cpio"
 require_sha256 "$PLATFORM_CPIO_SHA256" "$work/platform.cpio"
+# --calc_max_image_size 目前会忽略 --prop (avbtool 只解析不消费), 这里照样传,
+# 是为了让两处调用保持对称 —— 属性每多一个, footer 就大一分。
 max_preavb_size=$(python3 "$avbtool" add_hash_footer \
     --partition_size "$PARTITION_SIZE" \
     --partition_name vendor_boot \
     --hash_algorithm sha256 \
     --salt "$AVB_SALT" \
     --algorithm NONE \
+    --prop "com.android.build.vendor_boot.fingerprint:$AVB_FINGERPRINT" \
+    --prop "com.android.build.boot.security_patch:$AVB_SECURITY_PATCH" \
     --calc_max_image_size)
 
 # Unpack the Soong-built vendor_boot; the recovery fragment must be the v4
@@ -272,7 +301,8 @@ python3 "$avbtool" add_hash_footer \
     --hash_algorithm sha256 \
     --salt "$AVB_SALT" \
     --algorithm NONE \
-    --prop "com.android.build.vendor_boot.fingerprint:$AVB_FINGERPRINT"
+    --prop "com.android.build.vendor_boot.fingerprint:$AVB_FINGERPRINT" \
+    --prop "com.android.build.boot.security_patch:$AVB_SECURITY_PATCH"
 [ "$(stat -c '%s' "$work/vendor_boot.img")" -eq "$PARTITION_SIZE" ] || die "unexpected final image size"
 
 # Verify the final layout: header v4, fragment types/names, byte-identical
@@ -312,6 +342,7 @@ grep -F "Hash Algorithm:        sha256" "$work/avb-info.txt" >/dev/null
 grep -F "Partition Name:        vendor_boot" "$work/avb-info.txt" >/dev/null
 grep -F "Salt:                  $AVB_SALT" "$work/avb-info.txt" >/dev/null
 grep -F "Prop: com.android.build.vendor_boot.fingerprint -> '$AVB_FINGERPRINT'" "$work/avb-info.txt" >/dev/null
+grep -F "Prop: com.android.build.boot.security_patch -> '$AVB_SECURITY_PATCH'" "$work/avb-info.txt" >/dev/null
 
 install -m 0644 "$work/vendor_boot.img" "$output_image"
 sha256sum "$output_image" > "$output_image.sha256"
