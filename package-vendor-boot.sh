@@ -231,16 +231,27 @@ trim_platform_fragment "$platform_gzip" "$work/official-recovery.cpio" "$trimmed
 
 # Repack: platform fragment unnamed (type 0x1), recovery fragment named
 # "recovery" (type 0x2). Offsets/cmdline must match the stock image.
-# Source: vendor_boot.json (kernelLoadAddr=0x80000000, ramdisk=0xa4d00000,
-# tags=0x87c80000, dtb=0x87c80000, cmdline from vendor_boot.json).
+#
+# IMPORTANT: the numbers in vendor_boot.json are ABSOLUTE load addresses
+# (kernelLoadAddr=0x80000000, ramdisk=0xa4d00000, tags=0x87c80000,
+# dtb=0x87c80000), but --*_offset are RELATIVE to --base. mkbootimg writes
+# kernel_addr/ramdisk_addr/tags_addr as 32-bit 'I' fields computed as
+# base + offset, so passing the absolute values as offsets overflows 2^32
+# (0x80000000+0xa4d00000 = 0x124D00000) and aborts with
+# "struct.error: 'I' format requires 0 <= number <= 4294967295".
+# Subtract the base so the resulting absolute addresses match stock exactly:
+#   kernel  : 0x80000000 - 0x80000000 = 0x00000000
+#   ramdisk : 0xa4d00000 - 0x80000000 = 0x24d00000
+#   tags    : 0x87c80000 - 0x80000000 = 0x07c80000
+#   dtb     : 0x87c80000 - 0x80000000 = 0x07c80000
 python3 "$mkbootimg" \
     --header_version 4 \
     --pagesize 4096 \
     --base 0x80000000 \
     --kernel_offset 0x00000000 \
-    --ramdisk_offset 0xa4d00000 \
-    --tags_offset 0x87c80000 \
-    --dtb_offset 0x87c80000 \
+    --ramdisk_offset 0x24d00000 \
+    --tags_offset 0x07c80000 \
+    --dtb_offset 0x07c80000 \
     --vendor_cmdline "bootopt=64S3,32N2,64N2 product.version=PD2415_A_15.0.33.7.W10 fingerprint.abbr=15/AP3A.240905.015.A1 region_ver=W10 product.solution=MTK" \
     --dtb "$dtb" \
     --vendor_ramdisk "$trimmed_platform_gzip" \
