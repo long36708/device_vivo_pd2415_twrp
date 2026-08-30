@@ -35,9 +35,9 @@ AVB_FINGERPRINT=vivo/PD2415/PD2415:15/AP3A.240905.015.A1/compiler11071704:user/r
 #   2) 值是 2025-09-01, 不等于 Android 大版本的 SPL (AP3A.240905.015.A1 对应
 #      2024-09-05)。厂商会单独抬高 BOOT_SECURITY_PATCH, 两者不可互相推导。
 AVB_SECURITY_PATCH=2025-09-01
-PLATFORM_GZIP_SHA256=0d46312566c805ab63bd1b8ccbd7f673f45f57a499a06597ce9aedf0abcecdea    # prebuilt/vendor_ramdisk/platform.cpio.gz
-PLATFORM_CPIO_SHA256=6ddca715bd7f6224768ad14b7665a7d31841a79ff41fbc5a2e757057ae5fd7ba    # gunzipped platform cpio
-OFFICIAL_RECOVERY_CPIO_SHA256=2eb8207bf3d0a401b7f548c2b8d147effbf18071e3c01244f4b3edae20ec8189    # prebuilt/vendor_ramdisk/official_recovery.cpio.gz
+PLATFORM_GZIP_SHA256=54b170229d11aac8e64c09ffd0a16a109d36520e3b48b94d685451d4e4c367e4    # prebuilt/vendor_ramdisk/platform.cpio.gz
+PLATFORM_CPIO_SHA256=d2430c1b623f2c2be3c8d36cc8546632b9ad60c54cbb7cf8dbf64cb83ccc446f    # gunzipped platform cpio
+OFFICIAL_RECOVERY_CPIO_SHA256=d49d53bccb39bfa66a51613bc4109e87702b598d0a12d5f5f47baa078a69bee5    # prebuilt/vendor_ramdisk/official_recovery.cpio.gz
 DTB_SHA256=5da60d8425114cac3ac86b2724b6178354615d4042343375f0e3dd1d235bf050              # prebuilt/dtb/pd2415.dtb
 # Add one require_sha256 constant per staged module / firmware / HAL input and
 # verify them before packaging, exactly like the reference script does.
