@@ -126,3 +126,14 @@ TW_LOAD_VENDOR_MODULES := "bootprof.ko mrdump.ko aee_aed.ko vivo_bsp_engine.ko m
 OF_MAINTAINER := LongMo
 TW_DEFAULT_LANGUAGE := zh_CN
 FOX_USE_DATA_RECOVERY_FOR_SETTINGS := 1
+
+# --- vendor ramdisk platform fragment -------------------------------------------
+# package-vendor-boot.sh rebuilds vendor_ramdisk00 from the prebuilt stock platform
+# ramdisk (prebuilt/vendor_ramdisk/platform.cpio.gz) and only reads the built
+# vendor_boot.img to extract vendor_ramdisk01 (the recovery fragment). Soong's
+# vendorbootimage rule still mkbootfs TARGET_VENDOR_RAMDISK_OUT into vendor_ramdisk00;
+# without any fragment that directory is empty and mkbootfs fails ("cannot open
+# directory"), yielding an empty vendor_ramdisk00 warning. This minimal first-stage
+# fstab fragment gives mkbootfs real content so the build is clean. It is overwritten
+# by the prebuilt platform ramdisk at packaging time and has no functional effect.
+BOARD_VENDOR_RAMDISK_FRAGMENTS += pd2415
