@@ -1,0 +1,26 @@
+{
+  "attributes": [
+    {
+      "name": "MaxPerformance",
+      "tasks": ["top-app"]
+    }
+  ],
+  "profiles": [
+    {
+      "name": "SCHED_SP_DEFAULT",
+      "tasks": ["default"]
+    },
+    {
+      "name": "SCHED_SP_FOREGROUND",
+      "tasks": ["foreground", "top-app"]
+    },
+    {
+      "name": "SCHED_SP_SYSTEM",
+      "tasks": ["system-background"]
+    },
+    {
+      "name": "SCHED_SP_TOP_APP",
+      "tasks": ["top-app"]
+    }
+  ]
+}
