@@ -99,6 +99,18 @@ sh <device-tree>/package-vendor-boot.sh "$(pwd)" "$(pwd)/out/target/product/pd24
   device-specific; copy the structure from `device_xiaomi_dali_twrp` and adjust
   service names / node paths.
 
+## Build pitfalls (CI / fresh clone)
+
+- `recovery/root/system/etc/task_profiles.json` must use the Android 12+ schema
+  (`Attributes` / `Profiles` / `AggregateProfiles`). A legacy 9/10 `attributes`
+  + `tasks` file is silently ignored by the 14.1 `task_profiles` parser and
+  logcat will not work. Copy the full file from the device ROM.
+- `prebuilt/vendor_ramdisk/platform.cpio` is gitignored (too large to track);
+  only `platform.cpio.gz` is committed. `recovery/prepare-ramdisk.sh` and
+  `package-vendor-boot.sh` decompress the `.gz` at build time — never make the
+  build depend on the uncompressed `.cpio`, or a fresh CI clone fails with
+  "missing platform ramdisk".
+
 ## Pre-built vendor_boot source
 
 The official vendor_boot is already unpacked at
