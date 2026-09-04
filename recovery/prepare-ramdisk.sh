@@ -96,10 +96,16 @@ install -m 0644 "$script_dir/root/init.recovery.usb.rc" "$root/init.recovery.usb
 #    window. Anything the platform is missing is still staged here (together
 #    with modules.dep), so a partial platform ramdisk cannot silently break
 #    module loading.
-platform_cpio="$device_root/prebuilt/vendor_ramdisk/platform.cpio"
-test -f "$platform_cpio" || die "missing platform ramdisk: $platform_cpio"
+platform_gzip="$device_root/prebuilt/vendor_ramdisk/platform.cpio.gz"
+test -f "$platform_gzip" || die "missing platform ramdisk gzip: $platform_gzip"
+# Only the gzip-compressed platform ramdisk is committed; the uncompressed
+# .cpio is gitignored (too large to track) and is absent on a fresh CI clone.
+# Decompress it to a temp file so the parser below can read it (mirrors what
+# package-vendor-boot.sh does when it re-assembles vendor_ramdisk00).
+platform_cpio=$(mktemp)
+gzip -dc "$platform_gzip" > "$platform_cpio" || die "failed to decompress platform ramdisk: $platform_gzip"
 platform_module_list=$(mktemp)
-trap 'rm -f -- "$platform_module_list"' EXIT HUP INT TERM
+trap 'rm -f -- "$platform_cpio" "$platform_module_list"' EXIT HUP INT TERM
 python3 - "$platform_cpio" "$platform_module_list" <<'PY'
 import os
 import sys
