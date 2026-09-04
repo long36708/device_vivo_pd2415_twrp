@@ -19,6 +19,11 @@ set -eu
 export LC_ALL=C
 
 PARTITION_SIZE=134217728
+# Pre-AVB size of the stock vendor_boot.img (mod/vendor_boot.avb.json ->
+# footer.originalImageSize). Treat it as a sanity ceiling rather than a hard
+# limit: the LK is only known to load an image this large, so going over it
+# deserves a loud warning even though avbtool still has room.
+STOCK_PREAVB_SIZE=120795136
 # avbtool 的 --salt 要的是 **hex**, 32 字节即 64 个十六进制字符。
 # 别把官方 JSON 里那段 base64 直接搬过来 —— vendor_boot.avb.json / avbtool
 # info_image 之外的解包器 (unpack_bootimg 的配套 json、mkbootimg 系列) 会把
@@ -74,7 +79,7 @@ extract_vendor_ramdisk() {
     destination=$2
     mkdir -p "$destination"
     cpio_input="$destination/.pd2415-vendor-ramdisk.cpio"
-    gzip -dc "$fragment" > "$cpio_input"
+    decompress_fragment "$fragment" "$cpio_input"
     (
         cd "$destination"
         cpio -idmu --quiet < "$cpio_input"
@@ -216,6 +221,67 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
+# --- fragment compression ------------------------------------------------------
+# The stock vendor_boot stores BOTH vendor ramdisk fragments as lz4-legacy
+# streams (mod/ramdisk.1.lz4 / mod/ramdisk.2.lz4, magic 02 21 4c 18). Reproduce
+# that exact format so the LK's vendor-ramdisk loader sees what the stock image
+# feeds it. gzip — what earlier revisions used — is understood by the GKI
+# kernel but is NOT what this device's boot chain ships, so it stays only as an
+# automatic fallback when no lz4 binary is available.
+# Force one explicitly with PD2415_FRAGMENT_COMPRESSION=lz4 or =gzip.
+system_lz4=$(command -v lz4 2>/dev/null || true)
+lz4_tool=""
+for lz4_candidate in "$source_root/out/host/linux-x86/bin/lz4" "$system_lz4"
+do
+    if [ -n "$lz4_candidate" ] && [ -x "$lz4_candidate" ]
+    then
+        lz4_tool="$lz4_candidate"
+        break
+    fi
+done
+FRAGMENT_COMPRESSION=${PD2415_FRAGMENT_COMPRESSION:-}
+if [ -z "$FRAGMENT_COMPRESSION" ]
+then
+    if [ -n "$lz4_tool" ]
+    then
+        FRAGMENT_COMPRESSION=lz4
+    else
+        FRAGMENT_COMPRESSION=gzip
+        echo "$0: warning: no lz4 binary found, falling back to gzip (stock uses lz4)" >&2
+    fi
+fi
+case "$FRAGMENT_COMPRESSION" in
+    gzip) ;;
+    lz4)
+        [ -n "$lz4_tool" ] ||
+            die "PD2415_FRAGMENT_COMPRESSION=lz4 but no lz4 binary was found"
+        ;;
+    *) die "unknown PD2415_FRAGMENT_COMPRESSION: $FRAGMENT_COMPRESSION" ;;
+esac
+
+compress_fragment() {
+    # compress_fragment <plain cpio> <output>
+    case "$FRAGMENT_COMPRESSION" in
+        gzip) gzip -9 -n -c "$1" > "$2" ;;
+        lz4) "$lz4_tool" -12 -l -f -z -c "$1" > "$2" ;;
+    esac
+}
+verify_fragment() {
+    # verify_fragment <compressed>; for lz4-legacy a full decode to /dev/null is
+    # the only check that actually covers the payload.
+    case "$FRAGMENT_COMPRESSION" in
+        gzip) gzip -t "$1" ;;
+        lz4) "$lz4_tool" -d -l -c "$1" > /dev/null ;;
+    esac
+}
+decompress_fragment() {
+    # decompress_fragment <compressed> <plain cpio>
+    case "$FRAGMENT_COMPRESSION" in
+        gzip) gzip -dc "$1" > "$2" ;;
+        lz4) "$lz4_tool" -d -l -c "$1" > "$2" ;;
+    esac
+}
+
 gzip -dc "$platform_gzip" > "$work/platform.cpio"
 require_sha256 "$PLATFORM_CPIO_SHA256" "$work/platform.cpio"
 # --calc_max_image_size 目前会忽略 --prop (avbtool 只解析不消费), 这里照样传,
@@ -246,15 +312,17 @@ awk '
 [ -f "$recovery_fragment" ] || die "built recovery fragment is missing"
 gzip -t "$recovery_fragment"
 
-# Re-compress the recovery fragment deterministically.
+# Re-compress the recovery fragment with the selected algorithm, then prove the
+# round-trip is byte-identical.
 gzip -dc "$recovery_fragment" > "$work/recovery.cpio"
-optimized_recovery_fragment="$work/recovery-gzip9.cpio.gz"
-gzip -9 -n -c "$work/recovery.cpio" > "$optimized_recovery_fragment"
-gzip -t "$optimized_recovery_fragment"
-gzip -dc "$optimized_recovery_fragment" > "$work/recovery-gzip9.cpio"
-cmp "$work/recovery.cpio" "$work/recovery-gzip9.cpio"
+optimized_recovery_fragment="$work/recovery-fragment.$FRAGMENT_COMPRESSION"
+compress_fragment "$work/recovery.cpio" "$optimized_recovery_fragment"
+verify_fragment "$optimized_recovery_fragment"
+decompress_fragment "$optimized_recovery_fragment" "$work/recovery-roundtrip.cpio"
+cmp "$work/recovery.cpio" "$work/recovery-roundtrip.cpio"
 
-# Platform fragment: use the FULL official platform ramdisk as-is.
+# Platform fragment: use the FULL official platform ramdisk, re-compressed with
+# the same algorithm as the recovery fragment.
 #
 # Earlier this script ran `trim_platform_fragment` to drop files that were
 # byte-identical between the platform and recovery ramdisks. That deletion
@@ -265,41 +333,56 @@ cmp "$work/recovery.cpio" "$work/recovery-gzip9.cpio"
 # device hang at the logo — even with the stock boot image. We now keep the
 # complete platform ramdisk (the recovery fragment's own /init simply overlays
 # it in recovery mode).
-trimmed_platform_gzip="$platform_gzip"
+#
+# Its bytes come from $work/platform.cpio (the gzip prebuilt, already
+# SHA-verified against PLATFORM_CPIO_SHA256), so the LK gets the stock content
+# in the stock compression format.
+platform_fragment="$work/platform-fragment.$FRAGMENT_COMPRESSION"
+compress_fragment "$work/platform.cpio" "$platform_fragment"
+verify_fragment "$platform_fragment"
 
 # Repack: platform fragment unnamed (type 0x1), recovery fragment named
 # "recovery" (type 0x2). Offsets/cmdline must match the stock image.
 #
 # IMPORTANT: the numbers in vendor_boot.json are ABSOLUTE load addresses
-# (kernelLoadAddr=0x80000000, ramdisk=0xa4d00000, tags=0x87c80000,
+# (kernelLoadAddr=0x80000000, ramdisk=0xa4b00000, tags=0x87c80000,
 # dtb=0x87c80000), but --*_offset are RELATIVE to --base. mkbootimg writes
 # kernel_addr/ramdisk_addr/tags_addr as 32-bit 'I' fields computed as
 # base + offset, so passing the absolute values as offsets overflows 2^32
-# (0x80000000+0xa4d00000 = 0x124D00000) and aborts with
+# (0x80000000+0xa4b00000 = 0x124B00000) and aborts with
 # "struct.error: 'I' format requires 0 <= number <= 4294967295".
 # Subtract the base so the resulting absolute addresses match stock exactly:
 #   kernel  : 0x80000000 - 0x80000000 = 0x00000000
-#   ramdisk : 0xa4d00000 - 0x80000000 = 0x24d00000
+#   ramdisk : 0xa4b00000 - 0x80000000 = 0x24b00000
 #   tags    : 0x87c80000 - 0x80000000 = 0x07c80000
 #   dtb     : 0x87c80000 - 0x80000000 = 0x07c80000
+#
+# "ramdisk" above is vendor_boot.json's "loadAddr": 2762997760 (DECIMAL).
+# 2762997760 - 0x80000000 = 615514112 = 0x24B00000 -> absolute 0xA4B00000.
+# An earlier revision wrote 0x24d00000 (2 MiB too high) after misreading that
+# decimal as 0xA4D00000; keep it at 0x24b00000.
 python3 "$mkbootimg" \
     --header_version 4 \
     --pagesize 4096 \
     --base 0x80000000 \
     --kernel_offset 0x00000000 \
     --kernel "$prebuilt_kernel" \
-    --ramdisk_offset 0x24d00000 \
+    --ramdisk_offset 0x24b00000 \
     --tags_offset 0x07c80000 \
     --dtb_offset 0x07c80000 \
     --vendor_cmdline "bootopt=64S3,32N2,64N2 product.version=PD2415_A_15.0.33.7.W10 fingerprint.abbr=15/AP3A.240905.015.A1 region_ver=W10 product.solution=MTK" \
     --dtb "$dtb" \
-    --vendor_ramdisk "$trimmed_platform_gzip" \
+    --vendor_ramdisk "$platform_fragment" \
     --ramdisk_type RECOVERY \
     --ramdisk_name recovery \
     --vendor_ramdisk_fragment "$optimized_recovery_fragment" \
     --vendor_boot "$work/vendor_boot.preavb.img"
 
 preavb_size=$(stat -c '%s' "$work/vendor_boot.preavb.img")
+if [ "$preavb_size" -gt "$STOCK_PREAVB_SIZE" ]
+then
+    echo "$0: warning: pre-AVB size $preavb_size is larger than the stock image ($STOCK_PREAVB_SIZE); the LK may not be able to load it" >&2
+fi
 [ "$preavb_size" -le "$PARTITION_SIZE" ] || die "vendor_boot exceeds the partition before AVB: $preavb_size"
 [ "$preavb_size" -le "$max_preavb_size" ] ||
     die "vendor_boot exceeds the AVB maximum before footer creation: $preavb_size > $max_preavb_size"
@@ -339,7 +422,7 @@ awk '
     }
 ' "$work/output-info.txt" ||
     die "final vendor_boot layout does not match the official v4 contract"
-cmp "$trimmed_platform_gzip" "$work/output/vendor_ramdisk00"
+cmp "$platform_fragment" "$work/output/vendor_ramdisk00"
 cmp "$optimized_recovery_fragment" "$work/output/vendor_ramdisk01"
 cmp "$dtb" "$work/output/dtb"
 merged_root="$work/merged-root"
@@ -356,5 +439,10 @@ grep -F "Prop: com.android.build.boot.security_patch -> '$AVB_SECURITY_PATCH'" "
 
 install -m 0644 "$work/vendor_boot.img" "$output_image"
 sha256sum "$output_image" > "$output_image.sha256"
-printf 'pre-AVB size: %s (AVB maximum: %s)\n' "$preavb_size" "$max_preavb_size"
+printf 'fragment compression: %s (platform %s bytes, recovery %s bytes)\n' \
+    "$FRAGMENT_COMPRESSION" \
+    "$(stat -c '%s' "$platform_fragment")" \
+    "$(stat -c '%s' "$optimized_recovery_fragment")"
+printf 'pre-AVB size: %s (stock %s, AVB maximum: %s)\n' \
+    "$preavb_size" "$STOCK_PREAVB_SIZE" "$max_preavb_size"
 printf 'created %s\n' "$output_image"

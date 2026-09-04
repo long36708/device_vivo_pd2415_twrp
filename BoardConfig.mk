@@ -44,19 +44,25 @@ BOARD_KERNEL_BASE := 0x80000000
 BOARD_KERNEL_PAGESIZE := 4096
 BOARD_KERNEL_CMDLINE := bootopt=64S3,32N2,64N2 product.version=PD2415_A_15.0.33.7.W10 fingerprint.abbr=15/AP3A.240905.015.A1 region_ver=W10 product.solution=MTK
 # IMPORTANT: --*_offset values are RELATIVE to BOARD_KERNEL_BASE, but the
-# numbers in vendor_boot.json (ramdisk=0xa4d00000, tags=0x87c80000,
+# numbers in vendor_boot.json (ramdisk=0xa4b00000, tags=0x87c80000,
 # dtb=0x87c80000) are ABSOLUTE load addresses. mkbootimg writes
 # kernel_addr/ramdisk_addr/tags_addr as 32-bit 'I' fields computed as
 # base + offset, so feeding the absolute values back as offsets overflows
-# 2^32 (0x80000000+0xa4d00000 = 0x124D00000) and aborts with
+# 2^32 (0x80000000+0xa4b00000 = 0x124B00000) and aborts with
 # "struct.error: 'I' format requires 0 <= number <= 4294967295".
 # Therefore subtract the base here so the final absolute addresses stay
 # identical to stock:
 #   kernel  : 0x80000000 - 0x80000000 = 0x00000000
-#   ramdisk : 0xa4d00000 - 0x80000000 = 0x24d00000
+#   ramdisk : 0xa4b00000 - 0x80000000 = 0x24b00000
 #   tags    : 0x87c80000 - 0x80000000 = 0x07c80000
 #   dtb     : 0x87c80000 - 0x80000000 = 0x07c80000
-BOARD_MKBOOTIMG_ARGS := --header_version 4 --kernel_offset 0x00000000 --ramdisk_offset 0x24d00000 --tags_offset 0x07c80000 --dtb_offset 0x07c80000
+#
+# Do NOT read the ramdisk address off vendor_boot.json's "loadAddr" by eye:
+# it is DECIMAL (2762997760). 2762997760 - 0x80000000 = 615514112 = 0x24B00000,
+# i.e. 0xA4B00000 — NOT 0xA4D00000. Writing 0x24d00000 shifts the vendor
+# ramdisk 2 MiB above the stock load address and the LK then hands the kernel
+# a bogus initrd address (no boot, no recovery).
+BOARD_MKBOOTIMG_ARGS := --header_version 4 --kernel_offset 0x00000000 --ramdisk_offset 0x24b00000 --tags_offset 0x07c80000 --dtb_offset 0x07c80000
 
 TARGET_PREBUILT_KERNEL := $(DEVICE_PATH)/prebuilt/kernel
 BOARD_INCLUDE_DTB_IN_BOOTIMG := true
@@ -115,8 +121,14 @@ TW_INCLUDE_CRYPTO := true
 # $(call soong_config_set,omapi,uuid,<OMAPI_UUID>)
 
 # --- modules ----------------------------------------------------------------------
-# Boolean switch + quoted module name list. The .ko files are staged into the
-# ramdisk /lib/modules by recovery/prepare-ramdisk.sh (never PRODUCT_COPY_FILES).
+# Boolean switch + quoted module name list (never PRODUCT_COPY_FILES).
+# The .ko files behind this list live in the PLATFORM fragment: recovery mode
+# loads vendor_ramdisk00 (platform) AND vendor_ramdisk01 (recovery), and the
+# stock platform ramdisk already ships the whole /lib/modules closure — the
+# official recovery ramdisk contains no .ko at all. So
+# recovery/prepare-ramdisk.sh stages ONLY the modules the platform fragment is
+# missing (normally none); copying all 337 again added ~70 MB to the recovery
+# fragment and pushed vendor_boot past the LK's load window.
 # Module list copied verbatim from stock platform ramdisk modules.load
 # (F:\learn-front\learn-hook\vivo-x200-pm-vendor-boot\mod\root.1\lib\modules\modules.load).
 TW_LOAD_VENDOR_BOOT_MODULES := true

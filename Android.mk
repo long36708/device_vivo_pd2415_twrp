@@ -19,6 +19,13 @@ LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)
 # silently swallowed by $(wildcard). Keep this list in sync with
 # TW_LOAD_VENDOR_MODULES.
 #
+# prepare-ramdisk.sh stages only the modules the platform fragment does NOT
+# already provide (see BoardConfig.mk), so in practice nothing is copied from
+# here. These files stay declared as dependencies deliberately: if a future
+# platform ramdisk drops a module, the delta is picked up from this directory
+# and a missing file still fails the build instead of yielding a recovery that
+# cannot load it.
+#
 # IMPORTANT: the list below is the BARE module names (space-separated,
 # NO surrounding quotes) — it must match the value substituted into
 # prepare-ramdisk.sh's `for module in ...` loop. The BoardConfig.mk

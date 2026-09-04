@@ -33,10 +33,21 @@ filling per-device entries.
 - Extract vendor.build.prop from the OTA vendor partition payload.
 
 ### Changed
--
+- Vendor ramdisk fragments are written as lz4-legacy (the stock format) instead
+  of gzip. gzip remains available via `PD2415_FRAGMENT_COMPRESSION=gzip` and as
+  an automatic fallback when no `lz4` binary is on the build host.
 
 ### Fixed
--
+- `--ramdisk_offset` 0x24d00000 -> 0x24b00000 in both `BoardConfig.mk` and
+  `package-vendor-boot.sh`. `vendor_boot.json` publishes the load address as
+  DECIMAL (`2762997760` = 0xA4B00000); the old value put the vendor ramdisk
+  2 MiB above the stock address, which broke normal boot *and* recovery.
+- The recovery ramdisk no longer duplicates the 337 platform kernel modules.
+  Recovery mode loads `vendor_ramdisk00` (platform) **and** `vendor_ramdisk01`,
+  and the stock platform ramdisk already ships the full `/lib/modules` closure
+  (the official recovery ramdisk contains no `.ko` at all). `prepare-ramdisk.sh`
+  now stages only the modules the platform fragment is missing (~70 MB less in
+  the recovery fragment).
 
 ### Removed
 -
