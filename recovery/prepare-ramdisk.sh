@@ -14,6 +14,7 @@
 #   3.  touch firmware
 #   4.  vendor HAL closure (FBE-decrypt-essential)
 #   5.  VINTF manifest fragment dedup
+#   5b. remove normal-mode servicemanager.rc
 #   6.  prop.default rewrite with SPL stripping
 #   7.  ramdisk inventory manifest
 # The reference additionally: swaps in the Soong-built
@@ -353,6 +354,18 @@ vintf_frag="$root/system/etc/vintf/manifest/android.system.keystore2-service.xml
 if [ -f "$vintf_frag" ]; then
     rm -f -- "$vintf_frag"
     echo "pd2415 recovery ramdisk preparation: removed conflicting keystore2 VINTF fragment"
+fi
+
+# 5b. Remove the normal-mode servicemanager.rc so that only the recovery
+#     variant (servicemanager.recovery.rc) applies.  Both ship in the
+#     Soong-built recovery ramdisk under /system/etc/init/; init parses them
+#     in filesystem order, and the first definition wins.  If the normal-mode
+#     rc is parsed first, init ignores the recovery rc as a duplicate and
+#     starts servicemanager with non-recovery arguments that immediately exit(1).
+sm_rc="$root/system/etc/init/servicemanager.rc"
+if [ -f "$sm_rc" ]; then
+    rm -f -- "$sm_rc"
+    echo "pd2415 recovery ramdisk preparation: removed normal-mode servicemanager.rc"
 fi
 
 # 6. Rewrite prop.default from the official build props while stripping SPLs.
