@@ -14,7 +14,16 @@ import /init.recovery.project.rc
 on init
     # MediaTek MT6991 USB controller + configfs
     setprop sys.usb.configfs 1
-    setprop sys.usb.controller "11200000.dwc3"
+    setprop sys.usb.controller "16701000.usb0"
+
+on fs
+    # Load vendor kernel modules before USB init.  In vendor_boot v4
+    # recovery, init first stage does not modprobe /lib/modules, and
+    # the recovery binary loads them too late (after USB gadget init
+    # has already failed due to missing UDC driver).  Load them here
+    # so the USB controller (mtu3) and host controller (xhci-mtk-hcd-v2)
+    # are registered before the sys.usb.configfs triggers fire.
+    exec u:r:recovery:s0 root -- sh -c 'for m in $$(sort /lib/modules/modules.dep | sed "s/:.*//"); do insmod /lib/modules/$$m 2>/dev/null; done'
 
 on fs && property:ro.debuggable=0
     # SoC-specific fs hooks (e.g. charging-free USB detection) go here.
