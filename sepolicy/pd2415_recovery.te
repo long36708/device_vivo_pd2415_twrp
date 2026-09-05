@@ -53,3 +53,14 @@ type sysfs_soc, fs_type, sysfs_type;
 # recovery-domain neverallow (it is neither exec_type nor data_file_type).
 allow recovery recovery_modules_file:file { read open getattr };
 allow recovery recovery_modules_file:dir { read open getattr search };
+
+# --- servicemanager binder access --------------------------------------------
+# servicemanager.recovery.rc sets "selinux u:r:servicemanager_recovery:s0"
+# but that type may not exist in the recovery sepolicy, so the process
+# runs as u:r:recovery:s0.  selinux_android_setcontext() in servicemanager's
+# main() then checks whether the current domain has binder set_context_mgr;
+# without it, the function returns -1 and servicemanager exit(1).
+# Grant the recovery domain binder context-manager rights so that
+# servicemanager can register as the binder context manager even when
+# it falls back to the recovery SELinux context.
+allow recovery self:binder set_context_mgr;
