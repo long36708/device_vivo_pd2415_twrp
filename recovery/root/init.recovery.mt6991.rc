@@ -12,6 +12,14 @@
 import /init.recovery.project.rc
 
 on init
+    # Ensure /dev/binder exists for servicemanager.  On Android 15 with
+    # binderfs, /dev/binderfs is mounted by the kernel but the /dev/binder
+    # symlink (-> /dev/binderfs/binder) may not be created by the stock
+    # recovery init.rc.  Without it, servicemanager opens /dev/binder,
+    # gets ENOENT, and immediately exits with status 1.
+    mkdir /dev/binderfs 0755 root root
+    mount binderfs binderfs /dev/binderfs
+    symlink /dev/binderfs/binder /dev/binder
     # MediaTek MT6991 USB controller + configfs
     setprop sys.usb.configfs 1
     setprop sys.usb.controller "16701000.usb0"
@@ -39,7 +47,7 @@ on fs
     # has already failed due to missing UDC driver).  Load them here
     # so the USB controller (mtu3) and host controller (xhci-mtk-hcd-v2)
     # are registered before the sys.usb.configfs triggers fire.
-    exec u:r:recovery:s0 root -- sh -c 'for m in $$(sort /lib/modules/modules.dep | sed "s/:.*//"); do insmod /lib/modules/$$m 2>/dev/null; done'
+    exec u:r:recovery:s0 root -- /system/bin/sh -c 'for m in $$(sort /lib/modules/modules.dep | sed "s/:.*//"); do insmod /lib/modules/$$m 2>/dev/null; done'
 
 on fs && property:ro.debuggable=0
     # SoC-specific fs hooks (e.g. charging-free USB detection) go here.
