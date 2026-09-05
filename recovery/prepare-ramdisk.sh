@@ -8,8 +8,15 @@
 #
 # This scaffold mirrors the argument contract and staging order of
 # device_xiaomi_dali_twrp/recovery/prepare-ramdisk.sh. Implemented here:
-# prop.default rewrite from the official build props with SPL stripping
-# (below). The reference additionally: swaps in the Soong-built
+#   1.  rc files with explicit modes
+#   1b. first-stage fstab (for vendor_boot v4 recovery boot)
+#   2.  kernel modules (essential whitelist only)
+#   3.  touch firmware
+#   4.  vendor HAL closure (FBE-decrypt-essential)
+#   5.  VINTF manifest fragment dedup
+#   6.  prop.default rewrite with SPL stripping
+#   7.  ramdisk inventory manifest
+# The reference additionally: swaps in the Soong-built
 # servicemanager/libvintf (parsed from the Soong bridge mk), removes the
 # incompatible Recovery libc++ (the platform copy must win), stages
 # libminuitwrp + dmctl, trims languages/fonts, slims unused libraries and
@@ -86,6 +93,19 @@ done
 # 1. Re-install the rc files with explicit modes (the recovery-root copy may
 #    carry stale or wrongly-permissioned entries).
 install -m 0644 "$script_dir/root/init.recovery.usb.rc" "$root/init.recovery.usb.rc"
+
+# 1b. Install the first-stage fstab into the recovery ramdisk.
+#     In vendor_boot v4 recovery boot, the recovery ramdisk replaces the
+#     init_boot ramdisk as the primary ramdisk. init first stage needs
+#     /first_stage_ramdisk/fstab.mt6991 to mount system/vendor/etc.
+#     The Soong build does not automatically copy recovery/root/first_stage_ramdisk/
+#     content into the recovery cpio for vendor_boot v4 devices, and the fstab in
+#     vendor_ramdisk/pd2415/ goes into vendor_ramdisk00 (platform) which is
+#     overwritten by the prebuilt anyway. Explicitly install it here.
+fstab_src="$device_root/recovery/root/first_stage_ramdisk/fstab.mt6991"
+test -f "$fstab_src" || die "missing fstab source: $fstab_src"
+install -d -m 0755 "$root/first_stage_ramdisk"
+install -m 0644 "$fstab_src" "$root/first_stage_ramdisk/fstab.mt6991"
 
 # 2. Stage ONLY the kernel modules the platform fragment does not already ship.
 #    Recovery mode loads BOTH vendor_ramdisk00 (platform) and vendor_ramdisk01
