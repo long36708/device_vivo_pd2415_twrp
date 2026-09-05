@@ -18,6 +18,15 @@ on init
     # Stock init.mt6991.usb.rc sets both; some UDC writes use
     # ${vendor.usb.controller} instead of ${sys.usb.controller}.
     setprop vendor.usb.controller "16701000.usb0"
+    # Stock init.mt6991.usb.rc also sets these; USB gadget setup
+    # in on post-fs references ${vendor.usb.vid} for idVendor.
+    setprop vendor.usb.vid "0x0E8D"
+    # ACM serial ports (modem) — not used in recovery but set
+    # defaults to avoid undefined-property issues in vendor USB rc.
+    setprop vendor.usb.acm_cnt 0
+    setprop vendor.usb.acm_port0 ""
+    setprop vendor.usb.acm_port1 ""
+    setprop vendor.usb.acm_enable 0
     # servicemanager is class core but recovery init.rc may not call
     # class_start core; start explicitly so servicemanager.ready=true
     # is published and clients (adbd, keystore2) can proceed.
