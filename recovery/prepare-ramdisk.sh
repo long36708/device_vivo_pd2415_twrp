@@ -320,7 +320,22 @@ then
     fi
 fi
 
-# 5. Rewrite prop.default from the official build props while stripping SPLs.
+# 5. Remove conflicting VINTF manifest fragments.
+#    Trustonic KeyMint ships android.system.keystore2-service.xml declaring
+#    IKeystoreService/default @1, but AOSP's built manifest.xml already
+#    declares keystore2 @4.  Both register the same FqInstance
+#    (IKeystoreService/default) at different versions, which causes
+#    hwservicemanager VINTF parse error → servicemanager crash loop →
+#    recovery UI never starts (stuck on logo).
+#    The @4 declaration in manifest.xml is correct for Android 15;
+#    remove the @1 fragment.
+vintf_frag="$root/system/etc/vintf/manifest/android.system.keystore2-service.xml"
+if [ -f "$vintf_frag" ]; then
+    rm -f -- "$vintf_frag"
+    echo "pd2415 recovery ramdisk preparation: removed conflicting keystore2 VINTF fragment"
+fi
+
+# 6. Rewrite prop.default from the official build props while stripping SPLs.
 #    KeyMint validates FBE metadata key blobs against the Recovery-reported OS
 #    and vendor patchlevels. After an OTA bumps the ROM's SPL, a blob upgraded
 #    by the new system is newer than this Recovery build's baked SPL and
@@ -433,7 +448,7 @@ if not os.path.islink(default_link) or os.readlink(default_link) != "prop.defaul
 
 PY
 
-# 6. Record the final ramdisk inventory (consumed by package-vendor-boot.sh
+# 7. Record the final ramdisk inventory (consumed by package-vendor-boot.sh
 #    verification and incremental builds).
 cd "$root"
 find . | sed "s/.\\///" > ramdisk-files.txt
