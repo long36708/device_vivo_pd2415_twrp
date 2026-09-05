@@ -153,25 +153,26 @@ with open(list_path, "w", encoding="utf-8", errors="surrogateescape") as out:
 PY
 staged_modules=0
 skipped_modules=0
-# The stock PLATFORM fragment already carries the COMPLETE module closure:
-# prebuilt/vendor_ramdisk/platform.cpio.gz holds 337 .ko under lib/modules/
-# (70.5 MiB uncompressed, ~19 MiB of the 57.2 MiB lz4 platform fragment).
-# Recovery mode overlays vendor_ramdisk01 on top of vendor_ramdisk00, so every
-# module this recovery needs — vivo_ts.ko, the display panels, the crypto
-# drivers — is served by the platform fragment and duplicating any of them into
-# the recovery fragment is pure waste.
+# The stock PLATFORM fragment ships NO kernel modules at all: decompressing
+# prebuilt/vendor_ramdisk/platform.cpio.gz yields 907 entries and zero .ko
+# anywhere in the tree. The complete 337-module closure lives in the official
+# RECOVERY ramdisk (prebuilt/vendor_ramdisk/official_recovery.cpio.gz, 337 .ko
+# under lib/modules/) — and this vendor_boot-as-recovery build does NOT reuse
+# that archive as vendor_ramdisk01, because vendor_ramdisk01 is the Recovery we
+# build here. Nothing below contributes lib/modules, so this hook has to stage
+# every module itself.
 #
-# That duplication is what previously pushed vendor_boot over the 128 MiB
-# partition: 337 .ko costs ~18 MiB of lz4, while the partition only has ~16 MiB
-# of headroom left once platform (57.2) + kernel (34.7) + HAL/mcRegistry (17.5)
-# + dtb (0.5) are accounted for.
+# Do not "optimise" this by staging a subset. The CI payload check compares
+# each prebuilt .ko against $root/lib/modules by name
+# (ROTHKO_Twrp/.github/workflows/"Recovery Build.yml", step
+# "Verify recovery payload") and fails the build on any shortfall — that is
+# exactly how a 201-module allowlist produced
+# "ramdisk 缺少 136/337 个 prebuilt 模块".
 #
-# stage_module() skips whatever the platform already ships, so
-# prebuilt/recovery_modules/essential_modules.txt is a safety net for a partial
-# platform ramdisk, not the list that normally gets staged: on this device it
-# resolves to 0 staged / 201 skipped. Add a name there only if the platform
-# ramdisk stops shipping it. Falls back to "all not in platform" when the
-# allowlist is absent, to stay backward compatible.
+# stage_module() still skips whatever the platform ramdisk happens to ship, so
+# a platform that gains modules keeps working; it simply never triggers today.
+# An allowlist in prebuilt/recovery_modules/essential_modules.txt would only
+# reintroduce the shortfall, so stage the whole directory.
 allowlist="$module_dir/essential_modules.txt"
 stage_module() {
     module=$1
