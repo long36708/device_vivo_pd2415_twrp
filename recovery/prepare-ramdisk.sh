@@ -153,35 +153,99 @@ with open(list_path, "w", encoding="utf-8", errors="surrogateescape") as out:
 PY
 staged_modules=0
 skipped_modules=0
-# Iterate over every .ko in the module input directory (matches BoardConfig).
-for ko in "$module_dir"/*.ko
-do
-    [ -e "$ko" ] || continue
-    module=$(basename "$ko")
+# The stock PLATFORM fragment already carries the COMPLETE module closure:
+# prebuilt/vendor_ramdisk/platform.cpio.gz holds 337 .ko under lib/modules/
+# (70.5 MiB uncompressed, ~19 MiB of the 57.2 MiB lz4 platform fragment).
+# Recovery mode overlays vendor_ramdisk01 on top of vendor_ramdisk00, so every
+# module this recovery needs — vivo_ts.ko, the display panels, the crypto
+# drivers — is served by the platform fragment and duplicating any of them into
+# the recovery fragment is pure waste.
+#
+# That duplication is what previously pushed vendor_boot over the 128 MiB
+# partition: 337 .ko costs ~18 MiB of lz4, while the partition only has ~16 MiB
+# of headroom left once platform (57.2) + kernel (34.7) + HAL/mcRegistry (17.5)
+# + dtb (0.5) are accounted for.
+#
+# stage_module() skips whatever the platform already ships, so
+# prebuilt/recovery_modules/essential_modules.txt is a safety net for a partial
+# platform ramdisk, not the list that normally gets staged: on this device it
+# resolves to 0 staged / 201 skipped. Add a name there only if the platform
+# ramdisk stops shipping it. Falls back to "all not in platform" when the
+# allowlist is absent, to stay backward compatible.
+allowlist="$module_dir/essential_modules.txt"
+stage_module() {
+    module=$1
     test -f "$module_dir/$module" || die "missing module input: $module"
     if grep -Fxq "lib/modules/$module" "$platform_module_list"
     then
         skipped_modules=$((skipped_modules + 1))
-        continue
+        return
     fi
     install -d -m 0755 "$root/lib/modules"
     install -m 0644 "$module_dir/$module" "$root/lib/modules/$module"
     staged_modules=$((staged_modules + 1))
-done
+}
+if [ -f "$allowlist" ]; then
+    while IFS= read -r module || [ -n "$module" ]; do
+        [ -n "$module" ] || continue
+        case "$module" in */*) continue ;; esac
+        stage_module "$module"
+    done < "$allowlist"
+else
+    for ko in "$module_dir"/*.ko
+    do
+        [ -e "$ko" ] || continue
+        stage_module "$(basename "$ko")"
+    done
+fi
 if [ "$staged_modules" -gt 0 ]
 then
-    test -f "$module_dir/modules.dep" || die "missing modules.dep"
-    install -m 0644 "$module_dir/modules.dep" "$root/lib/modules/modules.dep"
+    if [ -f "$module_dir/modules.dep" ]
+    then
+        # Keep only dep entries for modules we actually staged, so the loader never
+        # references a module that is not in the ramdisk.
+        : > "$root/lib/modules/modules.dep"
+        while IFS= read -r line || [ -n "$line" ]; do
+            depmod=${line%%:*}
+            [ -f "$root/lib/modules/$depmod" ] || continue
+            printf '%s\n' "$line" >> "$root/lib/modules/modules.dep"
+        done < "$module_dir/modules.dep"
+    else
+        die "missing modules.dep"
+    fi
 fi
 printf 'kernel modules: %d staged, %d already provided by the platform fragment\n' \
     "$staged_modules" "$skipped_modules"
 
-# 3. Stage firmware into /vendor/firmware so the kernel firmware loader works
-#    without mounting the real vendor partition (reference: CS40L26 haptics).
+# 3. Stage firmware for the device's ACTUAL touch controller only.
+#    PD2415 (X200 Pro mini) does not load a Goodix gt989x blob: the touch
+#    firmware ships as vivo project blobs, TP-FW-<project>-MODID<id>-VER<ver>.bin
+#    plus the TP-CONFIG-FW / TP-THPCFG-FW / TP-VENDORCFG-FW companions.
+#    vivo_ts.ko picks one at runtime from the detected module id, so every MODID
+#    variant of the project has to be present.
+#    PD2419 (X200 Pro) is kept too: it shares this exact firmware image, the
+#    firmware-layer ro.product.* props all report PD2415 while the running
+#    ro.product.device/model may report PD2419, so a PD2415-only set would
+#    leave touch dead on the sibling SKU.
+#    The gt9895 / gt9896s / gt9916 / st_fts blobs that share /vendor/firmware
+#    belong to other boards and load on no IC this device has.
 if [ -d "$firmware_dir" ] && [ -n "$(ls -A "$firmware_dir")" ]
 then
     install -d -m 0755 "$root/vendor/firmware"
-    cp -a -- "$firmware_dir/." "$root/vendor/firmware/"
+    found=0
+    for project in PD2415 PD2419
+    do
+        for fw in "$firmware_dir"/TP-*-$project-*
+        do
+            [ -e "$fw" ] || continue
+            cp -a -- "$fw" "$root/vendor/firmware/"
+            found=$((found + 1))
+        done
+    done
+    if [ "$found" -eq 0 ]; then
+        echo "pd2415 recovery ramdisk preparation: warning: no PD2415/PD2419 touch firmware staged; touch will not work until added" >&2
+    fi
+    printf 'touch firmware: %d blobs staged\n' "$found"
 fi
 
 # 4. Stage the vendor HAL closure into /vendor (bin/, lib64/, TA directories)

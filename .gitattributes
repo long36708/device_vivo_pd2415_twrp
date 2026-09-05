@@ -1,1 +1,4 @@
 patches/recovery/*.patch whitespace=-blank-at-eol,-space-before-tab
+*.sh  text eol=lf
+*.mk  text eol=lf
+*.py  text eol=lf
