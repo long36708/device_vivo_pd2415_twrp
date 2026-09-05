@@ -15,6 +15,10 @@ on init
     # MediaTek MT6991 USB controller + configfs
     setprop sys.usb.configfs 1
     setprop sys.usb.controller "16701000.usb0"
+    # servicemanager is class core but recovery init.rc may not call
+    # class_start core; start explicitly so servicemanager.ready=true
+    # is published and clients (adbd, keystore2) can proceed.
+    start servicemanager
 
 on fs
     # Load vendor kernel modules before USB init.  In vendor_boot v4
