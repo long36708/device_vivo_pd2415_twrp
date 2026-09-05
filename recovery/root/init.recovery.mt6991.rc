@@ -45,7 +45,11 @@ on fs
     # has already failed due to missing UDC driver).  Load them here
     # so the USB controller (mtu3) and host controller (xhci-mtk-hcd-v2)
     # are registered before the sys.usb.configfs triggers fire.
-    exec u:r:recovery:s0 root -- /system/bin/sh -c 'for m in $$(cat /lib/modules/modules.dep | while read line; do echo $${line%%:*}; done); do insmod /lib/modules/$$m 2>/dev/null; done'
+    # Multi-pass insmod: modules.dep is not topologically sorted, so
+    # a module may appear before its dependencies.  Retry up to 5 passes
+    # so that once deps load in an earlier pass, the dependent module
+    # succeeds in the next one.
+    exec u:r:recovery:s0 root -- /system/bin/sh -c 'mods=$$(cat /lib/modules/modules.dep | while read line; do echo $${line%%:*}; done); for pass in 1 2 3 4 5; do changed=0; for m in $$mods; do if insmod $$m 2>/dev/null; then changed=1; fi; done; [ "$$changed" = "0" ] && break; done'
 
 on fs && property:ro.debuggable=0
     # SoC-specific fs hooks (e.g. charging-free USB detection) go here.
