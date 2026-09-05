@@ -160,19 +160,17 @@ skipped_modules=0
 # under lib/modules/) — and this vendor_boot-as-recovery build does NOT reuse
 # that archive as vendor_ramdisk01, because vendor_ramdisk01 is the Recovery we
 # build here. Nothing below contributes lib/modules, so this hook has to stage
-# every module itself.
+# the needed modules itself.
 #
-# Do not "optimise" this by staging a subset. The CI payload check compares
-# each prebuilt .ko against $root/lib/modules by name
-# (ROTHKO_Twrp/.github/workflows/"Recovery Build.yml", step
-# "Verify recovery payload") and fails the build on any shortfall — that is
-# exactly how a 201-module allowlist produced
-# "ramdisk 缺少 136/337 个 prebuilt 模块".
+# vendor_boot has a 128 MiB partition limit. Staging all 337 modules (70.5 MB
+# uncompressed) pushes the recovery fragment past that limit. An
+# essential_modules.txt whitelist selects only the ~236 modules that TWRP
+# recovery actually needs (storage/USB/display/touch/crypto infra) and
+# omits WiFi/BT/audio/camera/charging/modem drivers. The CI payload check
+# reads the same whitelist and verifies each listed module is present.
 #
 # stage_module() still skips whatever the platform ramdisk happens to ship, so
 # a platform that gains modules keeps working; it simply never triggers today.
-# An allowlist in prebuilt/recovery_modules/essential_modules.txt would only
-# reintroduce the shortfall, so stage the whole directory.
 allowlist="$module_dir/essential_modules.txt"
 stage_module() {
     module=$1
@@ -249,15 +247,77 @@ then
     printf 'touch firmware: %d blobs staged\n' "$found"
 fi
 
-# 4. Stage the vendor HAL closure into /vendor (bin/, lib64/, TA directories)
-#    so the crypto chain runs from the ramdisk without mounting vendor
-#    (reference: tee-supplicant, keymint, gatekeeper, weaver, secure_element,
-#    boot HAL + mitee/ta trustlets).
+# 4. Stage the vendor HAL closure into /vendor — selectively, to keep
+#    the recovery fragment under the vendor_boot size budget.
+#    Only FBE-decrypt-essential binaries, shared libraries, and Trustonic
+#    trustlets are staged; NFC/NXP/ESE and non-essential OEM trustlets are
+#    omitted. The crypto chain needs: tee-supplicant, keymint, gatekeeper,
+#    weaver, secure_element, boot HAL + mitee/ta trustlets.
 if [ -d "$vendor_hal_dir" ] && [ -n "$(ls -A "$vendor_hal_dir")" ]
 then
-    rm -rf -- "$root/vendor/bin" "$root/vendor/lib64"
     install -d -m 0755 "$root/vendor"
-    cp -a -- "$vendor_hal_dir/." "$root/vendor/"
+
+    # 4a. bin/ — all HAL service binaries are small; keep them all.
+    if [ -d "$vendor_hal_dir/bin" ]; then
+        install -d -m 0755 "$root/vendor/bin"
+        cp -a -- "$vendor_hal_dir/bin/." "$root/vendor/bin/"
+    fi
+
+    # 4b. lib64/ — exclude NFC / NXP / ESE libraries (not needed for FBE).
+    #    ese_spi_nxp.so, vendor.nxp.nxpese@1.0.so, vendor.nxp.nxpnfc@2.0.so,
+    #    android.hardware.nfc@*.so
+    if [ -d "$vendor_hal_dir/lib64" ]; then
+        install -d -m 0755 "$root/vendor/lib64"
+        for lib in "$vendor_hal_dir/lib64"/*
+        do
+            [ -e "$lib" ] || continue
+            case "$(basename "$lib")" in
+                android.hardware.nfc@*|vendor.nxp.*|ese_spi_nxp.so) continue ;;
+            esac
+            cp -a -- "$lib" "$root/vendor/lib64/"
+        done
+    fi
+
+    # 4c. mcRegistry/ — only FBE-essential Trustonic trustlets.
+    #    UUID prefix mapping:
+    #      050600 = KeyMint (keep ONLY the latest patch-level TA to save ~12 MB;
+    #              050600…9598 is newer and forwards-compatible with older SP)
+    #      060800 = Gatekeeper
+    #      070f   = Weaver
+    #      070600 = Keymaster (legacy)
+    #      077700 = Secure Storage (KeyMint rollback resistance)
+    #      090400 = Secure Element (SN100 eSE)
+    #    Dropped KeyMint TA: 05060000000000000000000000005228.tabin (12 MB,
+    #    superseded by 9598). Dropped OEM trustlets: 016669, 0721, 0804,
+    #    0811, 0a09, 0614, 0629, and all UUID-format (*.tabin with 32-hex
+    #    UUID names) entries not in the essential prefix list.
+    if [ -d "$vendor_hal_dir/mcRegistry" ]; then
+        install -d -m 0755 "$root/vendor/mcRegistry"
+        for ta in "$vendor_hal_dir/mcRegistry"/*
+        do
+            [ -e "$ta" ] || continue
+            name="$(basename "$ta")"
+            case "$name" in
+                # KeyMint — latest TA only (9598), drop older 5228
+                05060000000000000000000000009598.*|05060000000000000000000000ffffff.*) ;;
+                05060000000000000000000000005228.*) continue ;;
+                # Gatekeeper
+                06080000000000000000000000000000.*) ;;
+                # Weaver
+                070f0000000000000000000000000a0a.*) ;;
+                070f0100000000000000000000000a0a.*) ;;
+                # Keymaster (legacy)
+                0706000000000000000000000000004d.*) ;;
+                # Secure Storage
+                07770000000000000000000000000000.*) ;;
+                # Secure Element
+                09040000000000000000000000000000.*) ;;
+                # Everything else: OEM-specific trustlets not needed for FBE
+                *) continue ;;
+            esac
+            cp -a -- "$ta" "$root/vendor/mcRegistry/"
+        done
+    fi
 fi
 
 # 5. Rewrite prop.default from the official build props while stripping SPLs.
