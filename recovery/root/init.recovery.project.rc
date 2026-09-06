@@ -17,10 +17,12 @@ on early-init
     mkdir /usb_otg 0755 root root
     mkdir /mnt/vendor 0755 root root
     mkdir /mnt/vendor/persist 0755 root root
-    mount_all /system/etc/fstab.pd2415.persist --early
-    # Kinibi daemon registry (P1) — mcDriverDaemon --P1 points here.
-    mkdir /mnt/vendor/persist/mcRegistry 0771 system system
-    restorecon_recursive /mnt/vendor/persist
+    # NOTE: do NOT mount persist here.  At early-init the /dev/block/by-name
+    # nodes don't exist yet (ueventd hasn't coldbooted): mount_all --early
+    # waited 20s, logged "Skipping /dev/block/by-name/persist during
+    # mount_all", and delayed the whole boot by 20s.  Persist is mounted in
+    # the init.svc.recovery=running trigger below (stock
+    # init.recovery.platform.rc does the same explicit mount).
 
 on property:servicemanager.ready=true
     # Start device boot-control HAL if present.
@@ -93,10 +95,15 @@ on property:orangefox.postinit.status=1
 
 on property:init.svc.recovery=running
     # Recovery entry point; device-specific late hooks go here.
+    # Mount persist explicitly (by-name nodes exist by now).  Everything
+    # below depends on it: the Kinibi P1 registry and the boot-log sync.
+    mount ext4 /dev/block/by-name/persist /mnt/vendor/persist
+    mkdir /mnt/vendor/persist/mcRegistry 0771 system system
+    restorecon_recursive /mnt/vendor/persist
     # Keep TWRP's own boot log (/tmp/recovery.log, tmpfs) synced to the
     # persist partition: when the UI never comes up and the device
     # auto-reboots, this is the only way to recover the recovery log and
-    # see where the binary hung.  Persist is mounted in early-init above.
+    # see where the binary hung.
     start recovery_log_sync
     # Bring up the Kinibi daemon (its script waits for /dev/mobicore, which
     # load-modules.sh creates during on-fs).  mcDriverDaemon sets
