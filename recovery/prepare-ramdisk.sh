@@ -375,10 +375,11 @@ fi
 #     servicemanager_exec -> servicemanager.  The recovery domain cannot hold
 #     binder set_context_mgr (platform neverallow), so an unlabelled
 #     servicemanager runs as u:r:recovery:s0 and exit(1)s when it tries to
-#     register as the binder context manager.  An explicit 'selinux' line
-#     forces init to place each process in its AOSP-predefined domain
-#     (whitelisted by the neverallow) regardless of the type_transition
-#     catch-all.
+#     register as the binder context manager.  An explicit 'seclabel' line
+#     (the init rc keyword; NOT 'selinux', which the init parser rejects as
+#     an invalid keyword) forces init to place each process in its
+#     AOSP-predefined domain (whitelisted by the neverallow) regardless of
+#     the type_transition catch-all.
 for sm_rc_name in servicemanager.recovery.rc hwservicemanager.rc vndservicemanager.rc; do
     sm_rc="$root/system/etc/init/$sm_rc_name"
     case "$sm_rc_name" in
@@ -387,9 +388,9 @@ for sm_rc_name in servicemanager.recovery.rc hwservicemanager.rc vndservicemanag
         vndservicemanager.rc)       seclabel="u:r:vndservicemanager:s0" ;;
     esac
     if [ -f "$sm_rc" ]; then
-        if grep -q '^service ' "$sm_rc" && ! grep -q 'selinux ' "$sm_rc"; then
-            sed -i "/^service /a\\    selinux $seclabel" "$sm_rc"
-            echo "pd2415 recovery ramdisk preparation: patched $sm_rc_name with selinux $seclabel"
+        if grep -q '^service ' "$sm_rc" && ! grep -q 'seclabel ' "$sm_rc"; then
+            sed -i "/^service /a\\    seclabel $seclabel" "$sm_rc"
+            echo "pd2415 recovery ramdisk preparation: patched $sm_rc_name with seclabel $seclabel"
         fi
     else
         echo "pd2415 recovery ramdisk preparation: WARNING: $sm_rc_name not found, skipping seclabel patch"
