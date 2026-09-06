@@ -36,3 +36,9 @@
 # --- state & modules ---------------------------------------------------------
 /mnt/vendor/persist(/.*)?             u:object_r:persist_data_file:s0
 /lib/modules(/.*)?                    u:object_r:recovery_modules_file:s0
+
+# --- servicemanager domain transition ----------------------------------------
+# Label servicemanager so that init transitions the process from the recovery
+# domain into the predefined `servicemanager` domain, which is whitelisted
+# for binder set_context_mgr by AOSP platform neverallow rules.
+/system/bin/servicemanager             u:object_r:servicemanager_exec:s0

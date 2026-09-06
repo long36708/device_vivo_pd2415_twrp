@@ -55,12 +55,10 @@ allow recovery recovery_modules_file:file { read open getattr };
 allow recovery recovery_modules_file:dir { read open getattr search };
 
 # --- servicemanager binder access --------------------------------------------
-# servicemanager.recovery.rc sets "selinux u:r:servicemanager_recovery:s0"
-# but that type may not exist in the recovery sepolicy, so the process
-# runs as u:r:recovery:s0.  selinux_android_setcontext() in servicemanager's
-# main() then checks whether the current domain has binder set_context_mgr;
-# without it, the function returns -1 and servicemanager exit(1).
-# Grant the recovery domain binder context-manager rights so that
-# servicemanager can register as the binder context manager even when
-# it falls back to the recovery SELinux context.
-allow recovery self:binder set_context_mgr;
+# servicemanager runs in the AOSP-predefined `servicemanager` SELinux domain,
+# which is on the neverallow whitelist for `binder set_context_mgr`.  The
+# file_contexts entry for /system/bin/servicemanager triggers an automatic
+# domain transition from recovery → servicemanager, so servicemanager
+# inherently holds `set_context_mgr` without any vendor sepolicy allow rule.
+# Do NOT add `allow recovery self:binder set_context_mgr` — it violates the
+# AOSP platform neverallow at plat_pub_versioned.cil.

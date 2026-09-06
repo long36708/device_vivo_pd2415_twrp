@@ -36,6 +36,9 @@ on init
     # servicemanager is class core but recovery init.rc may not call
     # class_start core; start explicitly so servicemanager.ready=true
     # is published and clients (adbd, keystore2) can proceed.
+    # The predefined `servicemanager` SELinux domain (entered via the
+    # file_contexts domain transition) provides binder set_context_mgr
+    # automatically, so no vendor sepolicy allow rule is needed.
     start servicemanager
 
 on fs
