@@ -33,6 +33,14 @@ on init
     setprop vendor.usb.acm_port0 ""
     setprop vendor.usb.acm_port1 ""
     setprop vendor.usb.acm_enable 0
+    # Restore SELinux labels on /system/bin so that the file_contexts
+    # domain transition fires for binaries like servicemanager.
+    # Recovery ramdisk files lack correct SELinux xattrs, so without
+    # restorecon the domain transition does not trigger and services
+    # run as u:r:recovery:s0 instead of their proper SELinux domain
+    # (e.g. u:r:servicemanager:s0), causing exit(1) due to missing
+    # binder set_context_mgr permission.
+    restorecon_recursive /system/bin
     # servicemanager is class core but recovery init.rc may not call
     # class_start core; start explicitly so servicemanager.ready=true
     # is published and clients (adbd, keystore2) can proceed.
@@ -48,11 +56,9 @@ on fs
     # has already failed due to missing UDC driver).  Load them here
     # so the USB controller (mtu3) and host controller (xhci-mtk-hcd-v2)
     # are registered before the sys.usb.configfs triggers fire.
-    # Multi-pass insmod: modules.dep is not topologically sorted, so
-    # a module may appear before its dependencies.  Retry up to 5 passes
-    # so that once deps load in an earlier pass, the dependent module
-    # succeeds in the next one.
-    exec u:r:recovery:s0 root -- /system/bin/sh -c 'mods=$$(cat /lib/modules/modules.dep | while read line; do echo $${line%%:*}; done); for pass in 1 2 3 4 5; do changed=0; for m in $$mods; do if insmod $$m 2>/dev/null; then changed=1; fi; done; [ "$$changed" = "0" ] && break; done'
+    # Delegated to /sbin/load-modules.sh to avoid the init parser
+    # misinterpreting $(cat…) as a property expansion.
+    exec u:r:recovery:s0 root -- /sbin/load-modules.sh
 
 on fs && property:ro.debuggable=0
     # SoC-specific fs hooks (e.g. charging-free USB detection) go here.
