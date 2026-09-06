@@ -56,9 +56,9 @@ on fs
     # has already failed due to missing UDC driver).  Load them here
     # so the USB controller (mtu3) and host controller (xhci-mtk-hcd-v2)
     # are registered before the sys.usb.configfs triggers fire.
-    # Delegated to /sbin/load-modules.sh to avoid the init parser
+    # Delegated to /system/bin/load-modules.sh to avoid the init parser
     # misinterpreting $(cat…) as a property expansion.
-    exec u:r:recovery:s0 root -- /sbin/load-modules.sh
+    exec u:r:recovery:s0 root -- /system/bin/load-modules.sh
 
 on fs && property:ro.debuggable=0
     # SoC-specific fs hooks (e.g. charging-free USB detection) go here.

@@ -54,11 +54,12 @@ type sysfs_soc, fs_type, sysfs_type;
 allow recovery recovery_modules_file:file { read open getattr };
 allow recovery recovery_modules_file:dir { read open getattr search };
 
-# --- servicemanager binder access --------------------------------------------
-# servicemanager runs in the AOSP-predefined `servicemanager` SELinux domain,
-# which is on the neverallow whitelist for `binder set_context_mgr`.  The
-# file_contexts entry for /system/bin/servicemanager triggers an automatic
-# domain transition from recovery → servicemanager, so servicemanager
-# inherently holds `set_context_mgr` without any vendor sepolicy allow rule.
-# Do NOT add `allow recovery self:binder set_context_mgr` — it violates the
-# AOSP platform neverallow at plat_pub_versioned.cil.
+# --- servicemanager_recovery domain -------------------------------------------
+# servicemanager.recovery.rc specifies selinux u:r:servicemanager_recovery:s0,
+# but the TWRP/OrangeFox recovery build does not include this domain in the
+# platform policy.  Declare it here so the servicemanager process can enter
+# this domain and obtain binder set_context_mgr (which is allowed for the
+# servicemanager domain family by the AOSP neverallow whitelist).
+type servicemanager_recovery, domain;
+allow servicemanager_recovery self:binder set_context_mgr;
+allow servicemanager_recovery self:binder { call transfer };
