@@ -33,20 +33,20 @@ on init
     setprop vendor.usb.acm_port0 ""
     setprop vendor.usb.acm_port1 ""
     setprop vendor.usb.acm_enable 0
-    # Restore SELinux labels on /system/bin so that the file_contexts
-    # domain transition fires for binaries like servicemanager.
-    # Recovery ramdisk files lack correct SELinux xattrs, so without
-    # restorecon the domain transition does not trigger and services
-    # run as u:r:recovery:s0 instead of their proper SELinux domain
-    # (e.g. u:r:servicemanager:s0), causing exit(1) due to missing
-    # binder set_context_mgr permission.
+    # Restore SELinux labels on /system/bin for general label correctness
+    # (ramdisk files lack SELinux xattrs).  This is NOT what fixes the
+    # servicemanager domain: the recovery-sepolicy catch-all
+    # 'type_transition init file_type:process recovery' overrides any
+    # file_contexts transition.  The servicemanager domain is forced via
+    # explicit 'selinux' seclabels patched into the .rc files by
+    # prepare-ramdisk.sh step 5c.
     restorecon_recursive /system/bin
     # servicemanager is class core but recovery init.rc may not call
     # class_start core; start explicitly so servicemanager.ready=true
     # is published and clients (adbd, keystore2) can proceed.
-    # The predefined `servicemanager` SELinux domain (entered via the
-    # file_contexts domain transition) provides binder set_context_mgr
-    # automatically, so no vendor sepolicy allow rule is needed.
+    # It enters the predefined `servicemanager` SELinux domain via the
+    # seclabel patched in by prepare-ramdisk.sh step 5c, which provides
+    # binder set_context_mgr; no vendor sepolicy allow rule is needed.
     start servicemanager
 
 on fs

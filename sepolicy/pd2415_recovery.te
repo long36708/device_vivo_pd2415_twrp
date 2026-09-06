@@ -54,12 +54,19 @@ type sysfs_soc, fs_type, sysfs_type;
 allow recovery recovery_modules_file:file { read open getattr };
 allow recovery recovery_modules_file:dir { read open getattr search };
 
-# --- servicemanager_recovery domain -------------------------------------------
-# servicemanager.recovery.rc specifies selinux u:r:servicemanager_recovery:s0,
-# but the TWRP/OrangeFox recovery build does not include this domain in the
-# platform policy.  Declare it here so the servicemanager process can enter
-# this domain and obtain binder set_context_mgr (which is allowed for the
-# servicemanager domain family by the AOSP neverallow whitelist).
-type servicemanager_recovery, domain;
-allow servicemanager_recovery self:binder set_context_mgr;
-allow servicemanager_recovery self:binder { call transfer };
+# --- servicemanager domain transition ------------------------------------------
+# AOSP recovery sepolicy contains 'type_transition init file_type:process
+# recovery', which sends ALL init-spawned processes into the recovery domain,
+# overriding the specific type_transition for
+# servicemanager_exec -> servicemanager.  The recovery domain cannot hold
+# binder set_context_mgr (platform neverallow), so an unlabelled servicemanager
+# runs as u:r:recovery:s0 and exit(1)s when it registers as the binder context
+# manager.  Fixed by patching servicemanager.recovery.rc / hwservicemanager.rc /
+# vndservicemanager.rc with explicit 'selinux u:r:<domain>:s0' seclabels in
+# prepare-ramdisk.sh step 5c — no vendor allow rules are needed because the
+# AOSP-predefined domains already hold every required permission and are
+# whitelisted by the neverallow.
+# Do NOT add 'allow recovery self:binder set_context_mgr' (or the same for any
+# locally invented domain): the platform neverallow for binder set_context_mgr
+# applies to every domain attribute member added by vendor policy and fails the
+# build.

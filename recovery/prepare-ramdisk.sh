@@ -368,6 +368,34 @@ if [ -f "$sm_rc" ]; then
     echo "pd2415 recovery ramdisk preparation: removed normal-mode servicemanager.rc"
 fi
 
+# 5c. Patch the service manager .rc files with explicit selinux seclabels.
+#     AOSP recovery sepolicy carries 'type_transition init file_type:process
+#     recovery', which sends every init-spawned process into the recovery
+#     domain and overrides the specific type_transition for
+#     servicemanager_exec -> servicemanager.  The recovery domain cannot hold
+#     binder set_context_mgr (platform neverallow), so an unlabelled
+#     servicemanager runs as u:r:recovery:s0 and exit(1)s when it tries to
+#     register as the binder context manager.  An explicit 'selinux' line
+#     forces init to place each process in its AOSP-predefined domain
+#     (whitelisted by the neverallow) regardless of the type_transition
+#     catch-all.
+for sm_rc_name in servicemanager.recovery.rc hwservicemanager.rc vndservicemanager.rc; do
+    sm_rc="$root/system/etc/init/$sm_rc_name"
+    case "$sm_rc_name" in
+        servicemanager.recovery.rc) seclabel="u:r:servicemanager:s0" ;;
+        hwservicemanager.rc)        seclabel="u:r:hwservicemanager:s0" ;;
+        vndservicemanager.rc)       seclabel="u:r:vndservicemanager:s0" ;;
+    esac
+    if [ -f "$sm_rc" ]; then
+        if grep -q '^service ' "$sm_rc" && ! grep -q 'selinux ' "$sm_rc"; then
+            sed -i "/^service /a\\    selinux $seclabel" "$sm_rc"
+            echo "pd2415 recovery ramdisk preparation: patched $sm_rc_name with selinux $seclabel"
+        fi
+    else
+        echo "pd2415 recovery ramdisk preparation: WARNING: $sm_rc_name not found, skipping seclabel patch"
+    fi
+done
+
 # 6. Rewrite prop.default from the official build props while stripping SPLs.
 #    KeyMint validates FBE metadata key blobs against the Recovery-reported OS
 #    and vendor patchlevels. After an OTA bumps the ROM's SPL, a blob upgraded
