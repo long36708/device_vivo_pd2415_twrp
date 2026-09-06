@@ -58,9 +58,11 @@ on pd2415_vendor_runtime
 service mobicore /system/bin/start-mobicore.sh
     user system
     group system
-    priority -20
     disabled
     seclabel u:r:recovery:s0
+    # NOTE: no 'priority -20' here — in the permissive recovery the init
+    # child drops CAP_SYS_NICE before setpriority, so the option aborts the
+    # service with "setpriority failed: Permission denied" (status 6).
 
 service vendor.trustonic.tee /vendor/bin/hw/vendor.trustonic.tee-service
     user system
