@@ -97,7 +97,15 @@ TW_USE_LEGACY_BATTERY_SERVICES := true
 BOARD_RECOVERY_IMAGE_PREPARE = $(DEVICE_PATH)/recovery/prepare-ramdisk.sh $(TARGET_RECOVERY_ROOT_OUT) $(SOONG_OUT_DIR)/Android-$(TARGET_PRODUCT).mk $(abspath $(LLVM_READOBJ)) $(abspath $(DEVICE_PATH)/prebuilt/recovery_modules) $(abspath $(DEVICE_PATH)/prebuilt/recovery_properties) $(abspath $(DEVICE_PATH)/prebuilt/recovery_vendor_hal) $(abspath $(DEVICE_PATH)/prebuilt/recovery_firmware)
 
 # pd2415_recovery_prepare_marker is the phony guard package in Android.mk.
-TARGET_RECOVERY_DEVICE_MODULES += servicemanager.recovery pd2415_recovery_prepare_marker dmctl
+# NOTE: use the PLATFORM `servicemanager` binary, NOT `servicemanager.recovery`.
+# The recovery-variant binary links against the recovery variant of libvintf
+# and requires VintfObjectRecovery::GetInstance, but the libvintf.so that
+# lands in the recovery ramdisk is the PLATFORM variant (no such symbol), so
+# the recovery-variant binary dies with "CANNOT LINK EXECUTABLE" -> exit(1)
+# before main() runs -> servicemanager crash loop -> recovery never boots.
+# The platform binary needs only VintfObject (present in the ramdisk's
+# platform-variant libvintf.so) and runs fine (verified on device).
+TARGET_RECOVERY_DEVICE_MODULES += servicemanager pd2415_recovery_prepare_marker dmctl
 
 TW_RECOVERY_ADDITIONAL_RELINK_LIBRARY_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libsysutils.so
 

@@ -362,40 +362,29 @@ fi
 #     in filesystem order, and the first definition wins.  If the normal-mode
 #     rc is parsed first, init ignores the recovery rc as a duplicate and
 #     starts servicemanager with non-recovery arguments that immediately exit(1).
+#     (We ship the PLATFORM servicemanager binary — see BoardConfig.mk — and
+#     the service definition comes from the device tree's
+#     recovery/root/system/etc/init/servicemanager.recovery.rc, which carries
+#     'disabled' + 'seclabel u:r:servicemanager:s0'.)
 sm_rc="$root/system/etc/init/servicemanager.rc"
 if [ -f "$sm_rc" ]; then
     rm -f -- "$sm_rc"
     echo "pd2415 recovery ramdisk preparation: removed normal-mode servicemanager.rc"
 fi
 
-# 5c. Patch the service manager .rc files with explicit selinux seclabels.
-#     AOSP recovery sepolicy carries 'type_transition init file_type:process
-#     recovery', which sends every init-spawned process into the recovery
-#     domain and overrides the specific type_transition for
-#     servicemanager_exec -> servicemanager.  The recovery domain cannot hold
-#     binder set_context_mgr (platform neverallow), so an unlabelled
-#     servicemanager runs as u:r:recovery:s0 and exit(1)s when it tries to
-#     register as the binder context manager.  An explicit 'seclabel' line
-#     (the init rc keyword; NOT 'selinux', which the init parser rejects as
-#     an invalid keyword) forces init to place each process in its
-#     AOSP-predefined domain (whitelisted by the neverallow) regardless of
-#     the type_transition catch-all.
-for sm_rc_name in servicemanager.recovery.rc hwservicemanager.rc vndservicemanager.rc; do
-    sm_rc="$root/system/etc/init/$sm_rc_name"
-    case "$sm_rc_name" in
-        servicemanager.recovery.rc) seclabel="u:r:servicemanager:s0" ;;
-        hwservicemanager.rc)        seclabel="u:r:hwservicemanager:s0" ;;
-        vndservicemanager.rc)       seclabel="u:r:vndservicemanager:s0" ;;
-    esac
-    if [ -f "$sm_rc" ]; then
-        if grep -q '^service ' "$sm_rc" && ! grep -q 'seclabel ' "$sm_rc"; then
-            sed -i "/^service /a\\    seclabel $seclabel" "$sm_rc"
-            echo "pd2415 recovery ramdisk preparation: patched $sm_rc_name with seclabel $seclabel"
-        fi
-    else
-        echo "pd2415 recovery ramdisk preparation: WARNING: $sm_rc_name not found, skipping seclabel patch"
-    fi
-done
+# 5c. (removed) Earlier attempts patched the service-manager rc files with
+#     explicit 'seclabel' lines.  That was pointless: AOSP 14's
+#     servicemanager.recovery.rc already carries
+#     'seclabel u:r:servicemanager:s0', and TWRP's hwservicemanager.rc /
+#     vndservicemanager.rc intentionally pin 'seclabel u:r:recovery:s0'
+#     (they work fine in the recovery domain under permissive policy).
+#     The REAL boot failure was different: the recovery-variant
+#     servicemanager binary required VintfObjectRecovery, which the
+#     platform-variant libvintf.so in the ramdisk does not provide, so the
+#     linker killed it with exit(1) before main() ever ran (no avc, no
+#     logs).  Fixed by shipping the platform 'servicemanager' binary
+#     instead (BoardConfig.mk); the seclabel/domain machinery was verified
+#     working on device (runcon tests) and needs no vendor policy changes.
 
 # 6. Rewrite prop.default from the official build props while stripping SPLs.
 #    KeyMint validates FBE metadata key blobs against the Recovery-reported OS

@@ -1,0 +1,27 @@
+# Copyright (C) 2025 The OrangeFox for pd2415 contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# servicemanager service definition for the pd2415 recovery.
+#
+# We ship the PLATFORM `servicemanager` binary (see BoardConfig.mk:
+# TARGET_RECOVERY_DEVICE_MODULES), NOT the `servicemanager.recovery` module.
+# The recovery-variant binary links against the recovery variant of libvintf
+# and needs VintfObjectRecovery::GetInstance, but the libvintf.so that ends
+# up in the recovery ramdisk is the platform variant (no such symbol), so the
+# recovery-variant binary dies with "CANNOT LINK EXECUTABLE" (exit 1) before
+# main() runs — a servicemanager crash loop that keeps the recovery from
+# booting.  The platform binary needs only VintfObject, which the ramdisk's
+# platform libvintf.so provides (verified on device).
+#
+# This file replicates AOSP 14's servicemanager.recovery.rc (which normally
+# ships as the init_rc of the servicemanager.recovery module we no longer
+# use): `disabled` + explicit start, root, and the neverallow-whitelisted
+# servicemanager domain via seclabel.
+
+service servicemanager /system/bin/servicemanager
+    disabled
+    group system readproc
+    user root
+    onrestart setprop servicemanager.ready false
+    seclabel u:r:servicemanager:s0
