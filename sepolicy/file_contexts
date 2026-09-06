@@ -38,7 +38,7 @@
 /lib/modules(/.*)?                    u:object_r:recovery_modules_file:s0
 
 # --- servicemanager domain transition ----------------------------------------
-# Label servicemanager so that init transitions the process from the recovery
-# domain into the predefined `servicemanager` domain, which is whitelisted
-# for binder set_context_mgr by AOSP platform neverallow rules.
-/system/bin/servicemanager             u:object_r:servicemanager_exec:s0
+# The AOSP platform file_contexts already labels /system/bin/servicemanager as
+# servicemanager_exec, which triggers the domain transition from recovery →
+# servicemanager. No vendor override is needed here; adding one would cause a
+# "Multiple same specifications" build error.
