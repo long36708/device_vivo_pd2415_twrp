@@ -6,4 +6,7 @@ __pycache__/
 
 # Intermediate cpio files (only .cpio.gz needed)
 prebuilt/vendor_ramdisk/*.cpio
-.idea
+.idea_*.py
+_*.ps1
+diag.log
+prebuilt/recovery_modules/essential_modules_report.md
