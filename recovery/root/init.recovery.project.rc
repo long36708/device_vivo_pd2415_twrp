@@ -58,13 +58,15 @@ on pd2415_vendor_runtime
 # policy is permissive, so no per-HAL vendor allow rules are required, and
 # this avoids the exec_type/data_file_type neverallow traps entirely.
 service mobicore /system/bin/start-mobicore.sh
-    user system
+    user root
     group system
     disabled
     seclabel u:r:recovery:s0
-    # NOTE: no 'priority -20' here — in the permissive recovery the init
-    # child drops CAP_SYS_NICE before setpriority, so the option aborts the
-    # service with "setpriority failed: Permission denied" (status 6).
+    # NOTE 1: no 'priority -20' — the init child drops CAP_SYS_NICE, so
+    # setpriority(-20) aborts the service (status 6) before the script runs.
+    # NOTE 2: user root, not system — the built-in Kinibi driver's
+    # /dev/mobicore node comes up root:root 0600 (our ueventd rule may not
+    # apply in time), and a `system` daemon then fails open() silently.
 
 service vendor.trustonic.tee /vendor/bin/hw/vendor.trustonic.tee-service
     user system
@@ -95,9 +97,11 @@ on property:orangefox.postinit.status=1
 
 on property:init.svc.recovery=running
     # Recovery entry point; device-specific late hooks go here.
-    # Mount persist explicitly (by-name nodes exist by now).  Everything
-    # below depends on it: the Kinibi P1 registry and the boot-log sync.
-    mount ext4 /dev/block/by-name/persist /mnt/vendor/persist
+    # Mount persist explicitly.  'mount ext4 /dev/block/by-name/persist'
+    # fails here ("Can't lookup blockdev"): by-name symlinks are only made
+    # for fstab-listed partitions and ours lacks persist.  The helper scans
+    # /sys/class/block for PARTNAME=persist instead.
+    exec u:r:recovery:s0 root -- /system/bin/mount-persist.sh
     mkdir /mnt/vendor/persist/mcRegistry 0771 system system
     restorecon_recursive /mnt/vendor/persist
     # Keep TWRP's own boot log (/tmp/recovery.log, tmpfs) synced to the
