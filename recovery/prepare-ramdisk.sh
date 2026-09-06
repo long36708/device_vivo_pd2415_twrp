@@ -386,6 +386,11 @@ fi
 #     instead (BoardConfig.mk); the seclabel/domain machinery was verified
 #     working on device (runcon tests) and needs no vendor policy changes.
 
+# 5d. Make the log-sync helper executable (git on Windows does not keep the
+#     exec bit for files under recovery/root/).
+install -m 0755 "$device_root/recovery/root/system/bin/log-sync.sh" \
+    "$root/system/bin/log-sync.sh"
+
 # 6. Rewrite prop.default from the official build props while stripping SPLs.
 #    KeyMint validates FBE metadata key blobs against the Recovery-reported OS
 #    and vendor patchlevels. After an OTA bumps the ROM's SPL, a blob upgraded

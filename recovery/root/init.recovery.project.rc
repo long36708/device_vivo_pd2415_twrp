@@ -77,3 +77,13 @@ on property:orangefox.postinit.status=1
 
 on property:init.svc.recovery=running
     # Recovery entry point; device-specific late hooks go here.
+    # Keep TWRP's own boot log (/tmp/recovery.log, tmpfs) synced to the
+    # persist partition: when the UI never comes up and the device
+    # auto-reboots, this is the only way to recover the recovery log and
+    # see where the binary hung.  Persist is mounted in early-init above.
+    start recovery_log_sync
+
+service recovery_log_sync /system/bin/sh /system/bin/log-sync.sh
+    user root
+    seclabel u:r:recovery:s0
+    disabled
