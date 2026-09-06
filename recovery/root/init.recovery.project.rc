@@ -18,6 +18,8 @@ on early-init
     mkdir /mnt/vendor 0755 root root
     mkdir /mnt/vendor/persist 0755 root root
     mount_all /system/etc/fstab.pd2415.persist --early
+    # Kinibi daemon registry (P1) — mcDriverDaemon --P1 points here.
+    mkdir /mnt/vendor/persist/mcRegistry 0771 system system
     restorecon_recursive /mnt/vendor/persist
 
 on property:servicemanager.ready=true
@@ -41,35 +43,47 @@ on pd2415_vendor_runtime
     #   exec u:r:recovery:s0 -- /system/bin/pd2415-spl-override.sh
     #   exec u:r:recovery:s0 -- /system/bin/pd2415-ensure-tee.sh
 
-# --- crypto HAL chain (Trustonic TEE for PD2415) ---------------------------
-# PD2415 uses Trustonic TEE (vendor.trustonic.tee-service), NOT tee-supplicant.
-# HAL binaries in prebuilt/recovery_vendor_hal/bin/hw/:
-#   android.hardware.security.keymint@3.0-service.trustonic
-#   android.hardware.gatekeeper-service.trustonic
-#   android.hardware.boot-service.mtk
-#   android.hardware.secure_element@1.2-service
-#   vendor.trustonic.tee-service
-#
-# service vendor.trustonic.tee /vendor/bin/hw/vendor.trustonic.tee-service
-#     class core
-#     user system
-#     group system
-#     disabled
-#
-# on property:twrp.modules.loaded=true && property:vendor.teefs_state=ready
-#     start vendor.trustonic.tee
-#     start vendor.keymint-trustonic
-#     start keystore2
-#     start vendor.gatekeeper-trustonic
-#     start vendor.secure_element
-#     start vendor.boot-default
-#
-# Boot-time SPL override (prop.default must NOT bake SPLs; the installed
-# system's real patchlevel is published here):
-#   service pd2415-spl-override /system/bin/pd2415-spl-override.sh
-#       class core
-#       user root
-#       oneshot
+# --- crypto HAL chain (Trustonic Kinibi TEE for PD2415) ---------------------
+# Two layers, mirroring the stock recovery (trustonic.rc):
+#   1. mobicore = mcDriverDaemon, the Kinibi TEE supervisor daemon.  It needs
+#      mcDrvModule-ffa.ko (loaded by load-modules.sh before the
+#      pd2415_vendor_runtime trigger) and publishes
+#      ro.vendor.trustonic.ready=true once mcOpenSession works.
+#   2. The HALs (keymint / gatekeeper / tee-service), started only after the
+#      daemon is ready.  keystore2 is already running (its own rc) and its
+#      retry loop connects to keymint as soon as it registers.
+# Everything runs in the recovery domain via seclabel: the OrangeFox recovery
+# policy is permissive, so no per-HAL vendor allow rules are required, and
+# this avoids the exec_type/data_file_type neverallow traps entirely.
+service mobicore /system/bin/start-mobicore.sh
+    user system
+    group system
+    priority -20
+    disabled
+    seclabel u:r:recovery:s0
+
+service vendor.trustonic.tee /vendor/bin/hw/vendor.trustonic.tee-service
+    user system
+    group system
+    disabled
+    seclabel u:r:recovery:s0
+
+service vendor.keymint-trustonic /vendor/bin/hw/android.hardware.security.keymint@3.0-service.trustonic
+    user system
+    group system
+    disabled
+    seclabel u:r:recovery:s0
+
+service vendor.gatekeeper-trustonic /vendor/bin/hw/android.hardware.gatekeeper-service.trustonic
+    user system
+    group system
+    disabled
+    seclabel u:r:recovery:s0
+
+on property:ro.vendor.trustonic.ready=true
+    start vendor.trustonic.tee
+    start vendor.keymint-trustonic
+    start vendor.gatekeeper-trustonic
 
 on property:orangefox.postinit.status=1
     # Detach logical vendor/odm mounts OrangeFox may have created so they are
@@ -82,6 +96,11 @@ on property:init.svc.recovery=running
     # auto-reboots, this is the only way to recover the recovery log and
     # see where the binary hung.  Persist is mounted in early-init above.
     start recovery_log_sync
+    # Bring up the Kinibi daemon (its script waits for /dev/mobicore, which
+    # load-modules.sh creates during on-fs).  mcDriverDaemon sets
+    # ro.vendor.trustonic.ready=true when done, which starts the
+    # keymint/gatekeeper HALs above; keystore2's retry loop then connects.
+    start mobicore
 
 service recovery_log_sync /system/bin/sh /system/bin/log-sync.sh
     user root

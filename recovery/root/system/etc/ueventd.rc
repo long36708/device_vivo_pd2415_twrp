@@ -64,8 +64,7 @@ subsystem vfio
 /dev/usb_accessory        0660   root       usb
 /dev/tun                  0660   system     vpn
 
-# Device-specific TEE / secure-element nodes (example from dali). Adjust to the
-# target SoC's trusted-environment device names.
-#/dev/tee0                 0660   system     drmrpc
-#/dev/teepriv0             0660   system     drmrpc
-#/dev/mobicore-user        0660   system     system
+# Trustonic Kinibi (mcDrvModule-ffa.ko) device nodes — mcDriverDaemon runs
+# as `system` and opens /dev/mobicore; HALs/clients use /dev/mobicore-user.
+/dev/mobicore             0660   system     system
+/dev/mobicore-user        0660   system     system
